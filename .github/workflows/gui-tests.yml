@@ -1,0 +1,126 @@
+name: GUI Interface Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      gramps_ref:
+        description: 'gramps fork branch/tag/sha'
+        default: 'maintenance/gramps60'
+      addons_ref:
+        description: 'addons-source fork branch/tag/sha'
+        default: 'maintenance/gramps60'
+      addon_name:
+        description: 'Single addon to build (empty = all)'
+        default: ''
+
+jobs:
+  gui-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      - name: Checkout gramps fork
+        uses: actions/checkout@v4
+        with:
+          repository: eduralph/gramps
+          ref: ${{ github.event.inputs.gramps_ref || 'maintenance/gramps60' }}
+          path: gramps
+
+      - name: Checkout addons-source fork
+        uses: actions/checkout@v4
+        with:
+          repository: eduralph/addons-source
+          ref: ${{ github.event.inputs.addons_ref || 'maintenance/gramps60' }}
+          path: addons-source
+
+      - name: Checkout addons (upstream, publish target for make.py)
+        uses: actions/checkout@v4
+        with:
+          repository: gramps-project/addons
+          path: addons
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-gi-cairo python3-cairo \
+            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 \
+            libgirepository1.0-dev \
+            xvfb dbus-x11 at-spi2-core \
+            xdotool wmctrl \
+            gettext intltool \
+            librsvg2-common
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r gramps-testbed/requirements-test.txt
+          pip install -e gramps
+
+      - name: Build addons
+        working-directory: addons-source
+        run: |
+          if [ -n "${{ github.event.inputs.addon_name }}" ]; then
+            python make.py gramps60 build "${{ github.event.inputs.addon_name }}"
+          else
+            python make.py gramps60 build all
+          fi
+
+      - name: Install addons into user plugin directory
+        working-directory: addons-source
+        run: |
+          mkdir -p ~/.gramps/gramps60/plugins
+          for addon in */; do
+            [ -f "$addon/${addon%/}.gpr.py" ] && cp -r "$addon" ~/.gramps/gramps60/plugins/
+          done
+
+      - name: Seed example database
+        run: |
+          gramps -C TestTree -i gramps/example/gramps/example.gramps
+
+      - name: Run interface tests
+        working-directory: gramps-testbed
+        env:
+          ARTIFACTS_DIR: ${{ github.workspace }}/artifacts
+        run: |
+          mkdir -p test-results "$ARTIFACTS_DIR/screenshots"
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+            dbus-run-session -- bash -c '
+              gsettings set org.gnome.desktop.interface toolkit-accessibility true
+              /usr/libexec/at-spi-bus-launcher --launch-immediately &
+              sleep 2
+              python -m xmlrunner discover \
+                -s tests/interface \
+                -o test-results/ \
+                -v
+            '
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results
+          path: |
+            gramps-testbed/test-results/
+            artifacts/
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Interface Tests
+          path: gramps-testbed/test-results/*.xml
+          reporter: java-junit

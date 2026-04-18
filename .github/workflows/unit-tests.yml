@@ -1,0 +1,58 @@
+name: Unit Tests (upstream)
+
+# Runs gramps' own unittest suite exactly as upstream maintainers would.
+# This is your "am I breaking gramps" gate, separate from the GUI tests.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  unit-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout gramps fork
+        uses: actions/checkout@v4
+        with:
+          repository: eduralph/gramps
+          ref: maintenance/gramps60
+          path: gramps
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3-gi python3-gi-cairo python3-cairo \
+            gir1.2-gtk-3.0 \
+            libgirepository1.0-dev \
+            gettext intltool
+
+      - name: Install gramps
+        working-directory: gramps
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install unittest-xml-reporting
+
+      - name: Run unittest suite (upstream style)
+        working-directory: gramps
+        run: |
+          mkdir -p test-results
+          python -m xmlrunner discover -o test-results/ -v
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          name: Unit Tests
+          path: gramps/test-results/*.xml
+          reporter: java-junit

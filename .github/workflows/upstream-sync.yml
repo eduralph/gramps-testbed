@@ -1,0 +1,34 @@
+name: Sync Forks from Upstream
+
+# Rebases your forks onto upstream so they stay fast-forward-mergeable.
+# Runs nightly and on demand. Uses a PAT in secrets.FORK_SYNC_TOKEN with
+# repo write access to eduralph/gramps and eduralph/addons-source.
+
+on:
+  schedule:
+    - cron: '0 4 * * *'  # 04:00 UTC daily
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        repo:
+          - name: gramps
+            owner: eduralph
+          - name: addons-source
+            owner: eduralph
+        branch:
+          - master
+          - maintenance/gramps60
+
+    steps:
+      - name: Sync ${{ matrix.repo.name }}@${{ matrix.branch }}
+        env:
+          GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          gh repo sync ${{ matrix.repo.owner }}/${{ matrix.repo.name }} \
+            --source gramps-project/${{ matrix.repo.name }} \
+            --branch ${{ matrix.branch }}
