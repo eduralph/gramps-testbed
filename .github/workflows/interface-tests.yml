@@ -174,6 +174,13 @@ jobs:
         if: always()
         uses: dorny/test-reporter@v1
         with:
+          # working-directory is mandatory here: none of our checkouts
+          # land at the workflow root (all use `path:` subdirs), so
+          # dorny's internal `git ls-files` fails with "not a git
+          # repository" unless we point it at a checkout. The testbed
+          # itself is the natural anchor; path is resolved relative to
+          # it, so the glob drops its `gramps-testbed/` prefix.
+          working-directory: gramps-testbed
           name: Interface Tests (${{ matrix.gramps_ref }})
-          path: gramps-testbed/test-results/*.xml
+          path: test-results/*.xml
           reporter: java-junit

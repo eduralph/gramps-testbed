@@ -144,6 +144,10 @@ jobs:
         if: always()
         uses: dorny/test-reporter@v1
         with:
+          # See interface-tests.yml for the working-directory rationale —
+          # checkouts use `path:` subdirs so the workflow root isn't a
+          # git repo; anchor on the testbed checkout.
+          working-directory: gramps-testbed
           name: Unit Tests (${{ matrix.gramps_ref }})
-          path: gramps-testbed/test-results/*.xml
+          path: test-results/*.xml
           reporter: java-junit
