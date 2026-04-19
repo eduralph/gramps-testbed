@@ -17,8 +17,10 @@ class SmokeTest(GrampsInterfaceTestCase):
         self.assertTrue(frames, "No top-level Gramps frame in AT-SPI tree")
 
     def test_people_view_has_rows(self) -> None:
-        tab = self.app.child(name="People", roleName="page tab")
-        tab.click()
+        # Gramps 6.0's category navigator is a column of toggle buttons in the
+        # left sidebar, not a GtkNotebook page tab bar.
+        category = self.app.child(name="People", roleName="toggle button")
+        category.click()
         tree = self.app.child(roleName="tree table")
         self.assertGreater(
             len(tree.children), 0,

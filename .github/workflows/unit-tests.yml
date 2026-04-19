@@ -1,25 +1,37 @@
-name: Unit Tests (upstream)
-
-# Runs gramps' own unittest suite exactly as upstream maintainers would.
-# This is your "am I breaking gramps" gate, separate from the GUI tests.
+name: Unit Tests
 
 on:
   push:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      gramps_repo:
+        description: 'gramps repo (owner/name); empty = same-owner fork'
+        default: ''
+      gramps_ref:
+        description: 'gramps branch/tag/sha'
+        default: 'maintenance/gramps60'
 
 jobs:
   unit-tests:
     runs-on: ubuntu-24.04
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      # Repo resolution (in order): workflow input → repository variable
+      # → same-owner fork. Matches interface-tests.yml so forking this
+      # testbed alone is enough configuration.
       - name: Checkout gramps fork
         uses: actions/checkout@v4
         with:
-          repository: eduralph/gramps
-          ref: maintenance/gramps60
+          repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
+          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps60' }}
           path: gramps
 
       - name: Set up Python
@@ -28,31 +40,65 @@ jobs:
           python-version: '3.12'
 
       - name: Install system dependencies
+        # No xvfb/dbus/at-spi — unit tests do not launch the GUI. GTK
+        # introspection bindings are still required because gramps.gen
+        # imports gi at module load time.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3-gi python3-gi-cairo python3-cairo \
-            gir1.2-gtk-3.0 \
+            python3-gi python3-gi-cairo python3-cairo python3-icu \
+            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
             libgirepository1.0-dev \
-            gettext intltool
+            gettext intltool \
+            librsvg2-common
 
-      - name: Install gramps
-        working-directory: gramps
+      - name: Install Python dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .
-          pip install unittest-xml-reporting
+          pip install -r gramps-testbed/requirements-test.txt
+          # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
+          # which some of gramps' own *_test.py files import.
+          pip install -e 'gramps[testing]'
 
-      - name: Run unittest suite (upstream style)
+      - name: Compile Gramps translations
+        # Keeps gramps.gen imports quiet during test collection. Matches
+        # the same step in interface-tests.yml.
         working-directory: gramps
         run: |
-          mkdir -p test-results
-          python -m xmlrunner discover -o test-results/ -v
+          for po in po/*.po; do
+            lang=$(basename "$po" .po)
+            dest="build/mo/$lang/LC_MESSAGES"
+            mkdir -p "$dest"
+            msgfmt "$po" -o "$dest/gramps.mo"
+          done
+
+      - name: Run unit tests
+        # Mirrors the canonical command from ../gramps/AGENTS.md:
+        #   GRAMPS_RESOURCES=. python3 -m unittest discover -p "*_test.py"
+        # xmlrunner is a drop-in replacement for unittest that also writes
+        # JUnit XML. GRAMPS_RESOURCES=. is load-bearing — without it,
+        # several plugin tests fail to locate resource files.
+        working-directory: gramps
+        env:
+          GRAMPS_RESOURCES: .
+        run: |
+          mkdir -p "$GITHUB_WORKSPACE/gramps-testbed/test-results"
+          python -m xmlrunner discover \
+            -p '*_test.py' \
+            -o "$GITHUB_WORKSPACE/gramps-testbed/test-results/" \
+            -v
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unit-test-results
+          path: gramps-testbed/test-results/
 
       - name: Publish test report
         if: always()
         uses: dorny/test-reporter@v1
         with:
           name: Unit Tests
-          path: gramps/test-results/*.xml
+          path: gramps-testbed/test-results/*.xml
           reporter: java-junit

@@ -1,4 +1,4 @@
-name: GUI Interface Tests
+name: Interface Tests
 
 on:
   push:
@@ -6,11 +6,17 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      gramps_repo:
+        description: 'gramps repo (owner/name); empty = same-owner fork'
+        default: ''
       gramps_ref:
-        description: 'gramps fork branch/tag/sha'
+        description: 'gramps branch/tag/sha'
         default: 'maintenance/gramps60'
+      addons_source_repo:
+        description: 'addons-source repo (owner/name); empty = same-owner fork'
+        default: ''
       addons_ref:
-        description: 'addons-source fork branch/tag/sha'
+        description: 'addons-source branch/tag/sha'
         default: 'maintenance/gramps60'
       addon_name:
         description: 'Single addon to build (empty = all)'
@@ -27,18 +33,22 @@ jobs:
         with:
           path: gramps-testbed
 
+      # Repo resolution (in order): workflow input → repository variable
+      # → same-owner fork (auto-derived from this testbed's owner, so
+      # forking the testbed to you/gramps-testbed just works if you also
+      # have you/gramps and you/addons-source).
       - name: Checkout gramps fork
         uses: actions/checkout@v4
         with:
-          repository: eduralph/gramps
-          ref: ${{ github.event.inputs.gramps_ref || 'maintenance/gramps60' }}
+          repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
+          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps60' }}
           path: gramps
 
       - name: Checkout addons-source fork
         uses: actions/checkout@v4
         with:
-          repository: eduralph/addons-source
-          ref: ${{ github.event.inputs.addons_ref || 'maintenance/gramps60' }}
+          repository: ${{ github.event.inputs.addons_source_repo || vars.ADDONS_SOURCE_REPO || format('{0}/addons-source', github.repository_owner) }}
+          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
           path: addons-source
 
       - name: Checkout addons (upstream, publish target for make.py)
@@ -56,8 +66,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            python3-gi python3-gi-cairo python3-cairo \
-            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 \
+            python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
+            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
             libgirepository1.0-dev \
             xvfb dbus-x11 at-spi2-core \
             xdotool wmctrl \
@@ -68,24 +78,25 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r gramps-testbed/requirements-test.txt
-          pip install -e gramps
+          pip install -e 'gramps[testing]'
 
-      - name: Build addons
-        working-directory: addons-source
+      - name: Compile Gramps translations
+        # pip install -e skips setup.py build, so Gramps' build/mo dir is
+        # empty. Compile .po → .mo directly with msgfmt so launched Gramps
+        # finds its translations instead of falling back with a warning.
+        working-directory: gramps
         run: |
-          if [ -n "${{ github.event.inputs.addon_name }}" ]; then
-            python make.py gramps60 build "${{ github.event.inputs.addon_name }}"
-          else
-            python make.py gramps60 build all
-          fi
-
-      - name: Install addons into user plugin directory
-        working-directory: addons-source
-        run: |
-          mkdir -p ~/.gramps/gramps60/plugins
-          for addon in */; do
-            [ -f "$addon/${addon%/}.gpr.py" ] && cp -r "$addon" ~/.gramps/gramps60/plugins/
+          for po in po/*.po; do
+            lang=$(basename "$po" .po)
+            dest="build/mo/$lang/LC_MESSAGES"
+            mkdir -p "$dest"
+            msgfmt "$po" -o "$dest/gramps.mo"
           done
+
+      # Addons are intentionally not built or installed for the smoke suite:
+      # make.py mutates tracked .gpr.py files, and installing all 149 addons
+      # blocks Gramps GUI startup during plugin registration. The addon_name
+      # workflow input remains reserved for a future addon-aware job.
 
       - name: Seed example database
         run: |
@@ -103,7 +114,7 @@ jobs:
               /usr/libexec/at-spi-bus-launcher --launch-immediately &
               sleep 2
               python -m xmlrunner discover \
-                -s tests/interface \
+                -s tests -p "test_*.py" \
                 -o test-results/ \
                 -v
             '

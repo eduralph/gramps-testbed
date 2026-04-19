@@ -3,7 +3,7 @@
 Written as a ``unittest.TestCase`` subclass so tests can be proposed upstream
 (gramps-project/gramps) without a framework rewrite.
 
-Environment prerequisites (handled by CI / scripts/run-local.sh):
+Environment prerequisites (handled by CI / scripts/ubuntu/run-interface.sh):
   * Xvfb running on $DISPLAY
   * A D-Bus session bus (dbus-run-session)
   * at-spi-bus-launcher active
@@ -35,7 +35,7 @@ class GrampsInterfaceTestCase(unittest.TestCase):
     """
 
     TREE_NAME: str = "TestTree"
-    LAUNCH_TIMEOUT_SEC: int = 30
+    LAUNCH_TIMEOUT_SEC: int = 60
     SCREENSHOT_DIR: Path = Path(os.environ.get("ARTIFACTS_DIR", "artifacts")) / "screenshots"
 
     @classmethod
@@ -54,7 +54,11 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         while time.monotonic() < deadline:
             try:
                 app = root.application("gramps")
-                if app.findChildren(lambda n: n.roleName == "frame"):
+                cls._dismiss_startup_dialogs(app)
+                if app.findChildren(
+                    lambda n: n.roleName == "frame"
+                    and cls.TREE_NAME in (n.name or "")
+                ):
                     cls.app = app
                     return
             except Exception as exc:
@@ -62,11 +66,62 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             time.sleep(1)
 
         cls._capture_screenshot("launch-failure")
+        cls._dump_tree_on_timeout()
         cls._terminate_process()
         raise RuntimeError(
-            f"Gramps main window did not appear within "
-            f"{cls.LAUNCH_TIMEOUT_SEC}s (last error: {last_err!r})"
+            f"Gramps main window with tree {cls.TREE_NAME!r} did not appear "
+            f"within {cls.LAUNCH_TIMEOUT_SEC}s (last error: {last_err!r})"
         )
+
+    @classmethod
+    def _dump_tree_on_timeout(cls) -> None:
+        """Best-effort dump of the Gramps AT-SPI tree for diagnostics."""
+        try:
+            app = root.application("gramps")
+        except Exception:
+            print("TIMEOUT-DUMP: gramps application not visible in AT-SPI")
+            return
+
+        def _walk(node, depth: int = 0, max_depth: int = 6) -> None:
+            try:
+                name = getattr(node, "name", "") or ""
+                role = getattr(node, "roleName", "") or ""
+                print(f"TIMEOUT-DUMP {'  ' * depth}[{role}] {name!r}")
+            except Exception:
+                return
+            if depth >= max_depth:
+                return
+            try:
+                children = list(node.children)
+            except Exception:
+                return
+            for child in children:
+                _walk(child, depth + 1, max_depth)
+
+        print("TIMEOUT-DUMP >>> begin")
+        _walk(app)
+        print("TIMEOUT-DUMP <<< end")
+
+    @classmethod
+    def _dismiss_startup_dialogs(cls, app) -> None:
+        """Close modal dialogs/alerts blocking the main frame.
+
+        Gramps emits startup warnings (GExiv2 missing, GTK translations missing,
+        etc.) as GtkMessageDialog instances, which surface with ``roleName``
+        ``dialog`` or ``alert`` in AT-SPI. Leaving them up blocks the main loop,
+        so ``gramps -O <tree>`` never actually opens the tree.
+        """
+        for modal in app.findChildren(
+            lambda n: n.roleName in ("dialog", "alert")
+        ):
+            for btn in modal.findChildren(
+                lambda n: n.roleName == "push button"
+                and n.name in ("Close", "OK", "Cancel")
+            ):
+                try:
+                    btn.click()
+                except Exception:
+                    pass
 
     @classmethod
     def tearDownClass(cls) -> None:

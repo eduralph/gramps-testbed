@@ -1,0 +1,17 @@
+{
+	"folders": [
+		{
+			"path": "."
+		},
+		{
+			"path": "../addons-source"
+		},
+		{
+			"path": "../gramps"
+		},
+		{
+			"path": "../addons"
+		}
+	],
+	"settings": {}
+}

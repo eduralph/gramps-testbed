@@ -1,0 +1,55 @@
+# Ubuntu 24.04 testbed image. Mirrors the GitHub Actions environment so
+# local dogtail runs match CI. This is one of several planned base images
+# (future: Fedora/Arch Dockerfiles for other Linux distros; macOS and
+# Windows use host-native setups under scripts/macos/ and scripts/windows/
+# when those land).
+#
+# Image is tagged gramps-testbed:ubuntu-<gramps-version> (e.g.
+# gramps-testbed:ubuntu-6.0.8). The Gramps version is read at build time
+# from ../gramps/gramps/version.py by the wrapper scripts, so different
+# Gramps versions produce different image tags and coexist cleanly.
+#
+# Run:   via scripts/ubuntu/run-interface.sh, run-unit.sh, or run-manual.sh
+# Build: scripts/ubuntu/rebuild-image.sh (handles version tagging for you)
+FROM ubuntu:24.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    GTK_MODULES=gail:atk-bridge \
+    NO_AT_BRIDGE=0
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-pip python3-dev \
+      python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
+      gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
+      libgirepository1.0-dev \
+      xvfb dbus-x11 at-spi2-core \
+      xdotool wmctrl \
+      gettext intltool \
+      librsvg2-common \
+      git curl ca-certificates \
+      fonts-dejavu-core \
+      locales language-pack-gnome-en-base \
+ && locale-gen en_US.UTF-8 \
+ && rm -rf /var/lib/apt/lists/*
+
+ENV LANG=en_US.UTF-8 \
+    LC_ALL=en_US.UTF-8 \
+    LANGUAGE=en_US:en
+
+# dogtail + JUnit XML writer for unittest (pyatspi comes from python3-pyatspi apt package)
+RUN pip3 install --break-system-packages --no-cache-dir \
+      dogtail \
+      unittest-xml-reporting
+
+WORKDIR /workspace
+
+# Tests run as a non-root user so AT-SPI behaves normally
+RUN userdel -r ubuntu 2>/dev/null || true \
+ && useradd -m -u 1000 runner \
+ && mkdir -p /workspace /home/runner/.gramps \
+ && chown -R runner:runner /workspace /home/runner
+USER runner
+
+CMD ["/bin/bash"]

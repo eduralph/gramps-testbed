@@ -4,14 +4,26 @@
 #
 # Intended layout after running:
 #   <workspace>/
-#   ├── gramps/              (fork: eduralph/gramps)
-#   ├── addons-source/       (fork: eduralph/addons-source)
+#   ├── gramps/              (fork of gramps-project/gramps)
+#   ├── addons-source/       (fork of gramps-project/addons-source)
 #   ├── addons/              (upstream read-only, needed by make.py)
 #   └── gramps-testbed/      (this repo)
 #
+# Configuration (override via environment):
+#   FORK_OWNER             GitHub owner of your gramps + addons-source forks.
+#                          Default: auto-detected from this testbed's origin
+#                          remote, so `you/gramps-testbed` picks up
+#                          `you/gramps` and `you/addons-source` for free.
+#                          Falls back to `eduralph` if detection fails.
+#   GRAMPS_FORK_URL        Full URL override for the gramps fork.
+#   ADDONS_SRC_FORK_URL    Full URL override for the addons-source fork.
+#   BRANCH                 Branch to check out in both forks.
+#                          Default: maintenance/gramps60
+#
 # Usage:
-#   cd <workspace>/gramps-testbed
-#   ./scripts/bootstrap-forks.sh [--ssh]
+#   ./scripts/bootstrap-forks.sh                     # HTTPS, auto-owner
+#   ./scripts/bootstrap-forks.sh --ssh               # SSH, auto-owner
+#   FORK_OWNER=alice ./scripts/bootstrap-forks.sh    # HTTPS, alice/*
 
 set -euo pipefail
 
@@ -20,8 +32,40 @@ if [[ "${1:-}" == "--ssh" ]]; then
   USE_SSH=1
 fi
 
-WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+TESTBED="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORKSPACE="$(cd "$TESTBED/.." && pwd)"
 cd "$WORKSPACE"
+
+# Auto-detect FORK_OWNER from the testbed's origin remote so a fork of
+# gramps-testbed → you/gramps-testbed picks up you/gramps etc. without
+# configuration. Fall back to eduralph when there's no detectable remote.
+detect_fork_owner() {
+  local url owner
+  url="$(git -C "$TESTBED" config --get remote.origin.url 2>/dev/null || true)"
+  if [[ "$url" =~ github\.com[:/]([^/]+)/ ]]; then
+    owner="${BASH_REMATCH[1]}"
+    printf '%s' "$owner"
+  else
+    printf 'eduralph'
+  fi
+}
+
+FORK_OWNER="${FORK_OWNER:-$(detect_fork_owner)}"
+BRANCH="${BRANCH:-maintenance/gramps60}"
+UPSTREAM_OWNER="gramps-project"
+
+if (( USE_SSH )); then
+  PREFIX="git@github.com:"
+else
+  PREFIX="https://github.com/"
+fi
+github_url() { printf '%s%s.git\n' "$PREFIX" "$1"; }
+
+GRAMPS_FORK="${GRAMPS_FORK_URL:-$(github_url "$FORK_OWNER/gramps")}"
+ADDONS_SRC_FORK="${ADDONS_SRC_FORK_URL:-$(github_url "$FORK_OWNER/addons-source")}"
+GRAMPS_UPSTREAM="$(github_url "$UPSTREAM_OWNER/gramps")"
+ADDONS_SRC_UPSTREAM="$(github_url "$UPSTREAM_OWNER/addons-source")"
+ADDONS_UPSTREAM="$(github_url "$UPSTREAM_OWNER/addons")"
 
 clone_if_missing() {
   local dir="$1" fork_url="$2" upstream_url="$3" branch="$4"
@@ -40,22 +84,6 @@ clone_if_missing() {
       git -C "$dir" checkout "$branch"
   fi
 }
-
-if (( USE_SSH )); then
-  GRAMPS_FORK="git@github.com:eduralph/gramps.git"
-  ADDONS_SRC_FORK="git@github.com:eduralph/addons-source.git"
-  GRAMPS_UPSTREAM="git@github.com:gramps-project/gramps.git"
-  ADDONS_SRC_UPSTREAM="git@github.com:gramps-project/addons-source.git"
-  ADDONS_UPSTREAM="git@github.com:gramps-project/addons.git"
-else
-  GRAMPS_FORK="https://github.com/eduralph/gramps.git"
-  ADDONS_SRC_FORK="https://github.com/eduralph/addons-source.git"
-  GRAMPS_UPSTREAM="https://github.com/gramps-project/gramps.git"
-  ADDONS_SRC_UPSTREAM="https://github.com/gramps-project/addons-source.git"
-  ADDONS_UPSTREAM="https://github.com/gramps-project/addons.git"
-fi
-
-BRANCH="maintenance/gramps60"
 
 clone_if_missing "gramps"         "$GRAMPS_FORK"      "$GRAMPS_UPSTREAM"      "$BRANCH"
 clone_if_missing "addons-source"  "$ADDONS_SRC_FORK"  "$ADDONS_SRC_UPSTREAM"  "$BRANCH"

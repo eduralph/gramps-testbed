@@ -1,3 +1,2 @@
 dogtail
-pyatspi
 unittest-xml-reporting
