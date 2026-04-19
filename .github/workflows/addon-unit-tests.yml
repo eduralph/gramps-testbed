@@ -52,29 +52,43 @@ jobs:
           ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
           path: addons-source
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: gramps-testbed/requirements-test.txt
-
       - name: Install system dependencies
         # No xvfb/dbus/at-spi — addon unit tests do not launch the GUI.
         # Same apt list as unit-tests.yml: gramps.gen still imports gi on
         # load, so GTK introspection bindings must be present.
+        #
+        # python3-venv / python3-pip are installed here so the next step
+        # can build a venv that inherits python3-gi from the system
+        # interpreter.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-icu \
             gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
             libgirepository1.0-dev \
             gettext intltool \
             librsvg2-common
 
+      - name: Set up Python venv (inherits python3-gi from apt)
+        # See unit-tests.yml for rationale — apt-installed PyGObject is
+        # only visible to the system Python, not to setup-python@v5's
+        # toolcache interpreter, so we use a system-site-packages venv.
+        run: |
+          python3 -m venv --system-site-packages .venv
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m pip install --upgrade pip
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('gramps-testbed/requirements-test.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r gramps-testbed/requirements-test.txt
           # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
           # which some addon tests also import transitively.
