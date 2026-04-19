@@ -28,6 +28,15 @@ on:
         description: 'Single addon to build (empty = all)'
         default: ''
 
+# dorny/test-reporter publishes a check run per matrix cell and annotates
+# the PR. GITHUB_TOKEN defaults to restrictive here, so grant the
+# specific scopes it needs — contents: read for checkout, checks: write
+# for the published check run, pull-requests: write for annotations.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   gui-tests:
     runs-on: ubuntu-24.04
@@ -77,17 +86,14 @@ jobs:
           repository: gramps-project/addons
           path: addons
 
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-          cache: pip
-          cache-dependency-path: gramps-testbed/requirements-test.txt
-
       - name: Install system dependencies
+        # python3-venv / python3-pip are installed here so the next step
+        # can build a venv that inherits python3-gi and python3-pyatspi
+        # from the system interpreter.
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
+            python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
             gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
             libgirepository1.0-dev \
@@ -96,9 +102,31 @@ jobs:
             gettext intltool \
             librsvg2-common
 
+      - name: Set up Python venv (inherits python3-gi / python3-pyatspi from apt)
+        # Ubuntu 24.04's apt python3-gi and python3-pyatspi install into
+        # the system Python's dist-packages only; a fresh interpreter from
+        # setup-python@v5 can't see those bindings, and gramps.gen imports
+        # gi on module load — so every gramps-touching command dies with
+        # ModuleNotFoundError. dogtail (GUI driver) also requires pyatspi
+        # at the same interpreter. --system-site-packages keeps pip
+        # installs in the venv but inherits apt-provided bindings.
+        # Replaces actions/setup-python@v5; pip cache is restored below
+        # via actions/cache.
+        run: |
+          python3 -m venv --system-site-packages .venv
+          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m pip install --upgrade pip
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('gramps-testbed/requirements-test.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
       - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
           pip install -r gramps-testbed/requirements-test.txt
           pip install -e 'gramps[testing]'
 
@@ -155,6 +183,13 @@ jobs:
         if: always()
         uses: dorny/test-reporter@v1
         with:
+          # working-directory is mandatory here: none of our checkouts
+          # land at the workflow root (all use `path:` subdirs), so
+          # dorny's internal `git ls-files` fails with "not a git
+          # repository" unless we point it at a checkout. The testbed
+          # itself is the natural anchor; path is resolved relative to
+          # it, so the glob drops its `gramps-testbed/` prefix.
+          working-directory: gramps-testbed
           name: Interface Tests (${{ matrix.gramps_ref }})
-          path: gramps-testbed/test-results/*.xml
+          path: test-results/*.xml
           reporter: java-junit
