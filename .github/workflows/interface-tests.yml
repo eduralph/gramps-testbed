@@ -28,6 +28,15 @@ on:
         description: 'Single addon to build (empty = all)'
         default: ''
 
+# dorny/test-reporter publishes a check run per matrix cell and annotates
+# the PR. GITHUB_TOKEN defaults to restrictive here, so grant the
+# specific scopes it needs — contents: read for checkout, checks: write
+# for the published check run, pull-requests: write for annotations.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
 jobs:
   gui-tests:
     runs-on: ubuntu-24.04
