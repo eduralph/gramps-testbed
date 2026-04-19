@@ -1,0 +1,55 @@
+name: Docker Image Build
+
+# Validates that docker/Dockerfile.ubuntu still builds. The testbed's
+# CI jobs install their dependencies directly onto the runner rather
+# than executing inside this image, so a broken Dockerfile would only
+# surface on a local-run attempt. Running a headless build here catches
+# apt-package removals, pip resolver breaks, and base-image churn early
+# — without publishing the image anywhere (keeps the testbed free of an
+# external registry dependency).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docker/Dockerfile.ubuntu
+      - .github/workflows/docker-build.yml
+  pull_request:
+    paths:
+      - docker/Dockerfile.ubuntu
+      - .github/workflows/docker-build.yml
+  schedule:
+    # Nightly drift check at 06:00 UTC. Catches upstream Ubuntu 24.04
+    # base-image changes and apt-package removals even when the
+    # Dockerfile itself is untouched.
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  build-ubuntu:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    # Advisory gate. A broken Dockerfile only affects local runs, not
+    # CI tests (which install directly on the runner). Don't block
+    # testbed PRs on transient apt/pip flakes.
+    continue-on-error: true
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Ubuntu image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile.ubuntu
+          push: false
+          load: false
+          tags: gramps-testbed:ubuntu-ci
+          # GHA cache only — never publish to a registry. Keeps the
+          # testbed self-contained (nothing downstream depends on an
+          # image we publish) while making rebuilds cheap.
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
