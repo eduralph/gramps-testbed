@@ -113,9 +113,15 @@ docker run --rm \
       # package; entering it makes tests/ the start+top dir, and the
       # __file__-based sys.path hacks inside test_*.py still resolve the
       # addon module (they use os.path.dirname(os.path.abspath(__file__))).
+      #
+      # PYTHONPATH pins /workspace/addons-source so tests that use
+      # package-style imports (from <Addon>.<mod> import ...) resolve via
+      # namespace-package lookup, matching the documented
+      # "PYTHONPATH=. python -m unittest ..." invocation used upstream.
       (
         cd "$test_dir"
         GRAMPS_RESOURCES=/workspace/gramps \
+        PYTHONPATH="/workspace/addons-source${PYTHONPATH:+:$PYTHONPATH}" \
           python3 -m xmlrunner discover \
             -p "test_*.py" \
             -o "$out_dir" \
