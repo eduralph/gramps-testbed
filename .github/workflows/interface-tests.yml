@@ -38,7 +38,7 @@ permissions:
   pull-requests: write
 
 jobs:
-  gui-tests:
+  interface-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Blocking gate. The interface smoke suite is the testbed's primary

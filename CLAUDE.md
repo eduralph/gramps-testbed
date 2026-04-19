@@ -32,6 +32,30 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   by the wrapper scripts so different Gramps versions get different tags
 - Do not edit files in ../gramps or ../addons-source without explicit instruction
 
-## Current priority
-Get tests/interface/test_smoke.py passing locally and in CI before adding any
-other tests.
+## Status
+Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
+— the previous "smoke before all else" priority is cleared. No singular next
+focus yet; natural candidates are expanding interface coverage, porting
+scripts to other platforms, or scheduling the addon-unit suite.
+
+## CI gates and branch protection
+- `main` is protected by ruleset "main branch protection" (id 15262402):
+  PR required (0 approvals), no force-push, no deletion, conversation
+  resolution required. Admin can bypass on PR merges only — direct pushes
+  to main are never allowed.
+- Gate policy: PR-blocking checks should only fire on issues the PR's own
+  diff can cause. Every test workflow here runs gramps or addon code
+  against upstream, so **none are listed as required checks**. Unit Tests
+  and Docker Image Build additionally set `continue-on-error: true` at
+  job level so their workflow conclusion stays green even when the job
+  check-run is red. Interface Tests runs visibly but doesn't block.
+- Python env in CI: install `python3-gi`/`python3-pyatspi` via apt and
+  create a `--system-site-packages` venv. **Do not switch to
+  `actions/setup-python@v5`** — the toolcache interpreter can't see
+  apt-installed PyGObject and everything that imports `gi` dies on load.
+- Adding a new Gramps minor: append to `matrix.gramps_ref` in
+  unit-tests.yml and interface-tests.yml (keep them in sync).
+- Nightly drift crons fire 1-2h after upstream-sync (04:00 UTC): unit
+  tests 05:00, interface tests 05:30, docker build 06:00.
+- `eduralph/gramps` and `eduralph/addons-source` carry a parallel
+  "PRFirst" ruleset on `master` + `maintenance/gramps60` (no bypass).
