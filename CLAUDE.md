@@ -35,6 +35,17 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   class under dotted-path loading.
 - Platform-specific scripts live under ./scripts/<platform>/; today only
   scripts/ubuntu/ exists (Fedora/Arch/macOS/Windows equivalents are planned)
+- Addon test filename convention (mirrors addons-source/.github/workflows/ci.yml):
+  - `test_*.py` — general, runs on every platform
+  - `test_linux_*.py` — Linux-only
+  - `test_windows_*.py` — Windows-only
+  - `test_integration_*.py` — Linux-only, full-pipeline/DB-backed
+  Each platform's `run-addon-unit.sh` (and the corresponding CI job) filters
+  out the prefixes that don't match its OS. The Ubuntu runner skips
+  `test_windows_*` and runs everything else; a future `scripts/windows/`
+  runner would do the inverse. Until a Windows image/runner exists in the
+  testbed, `test_windows_*.py` runs nowhere here — Windows coverage lives
+  in addons-source's own Windows CI job.
 - Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.0.8),
   built from docker/Dockerfile.ubuntu; version is auto-read from gramps/version.py
   by the wrapper scripts so different Gramps versions get different tags
