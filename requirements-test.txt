@@ -1,2 +1,6 @@
 dogtail
 unittest-xml-reporting
+# Addon runtime dep: TMGimporter/libtmg.py imports `dbf` under a try/except
+# that only logs on ImportError, so tests crash later with NameError on
+# Table unless dbf is present.
+dbf>=0.99.0

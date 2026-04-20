@@ -38,10 +38,15 @@ ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
     LANGUAGE=en_US:en
 
-# dogtail + JUnit XML writer for unittest (pyatspi comes from python3-pyatspi apt package)
+# dogtail + JUnit XML writer for unittest (pyatspi comes from python3-pyatspi apt package).
+# dbf is an addon runtime dep (TMGimporter/libtmg.py imports it under a
+# try/except that only logs a warning on failure, so tests hit NameError
+# on Table later if dbf is absent). Bake it in so addon-unit tests can
+# exercise the integration paths without extra setup.
 RUN pip3 install --break-system-packages --no-cache-dir \
       dogtail \
-      unittest-xml-reporting
+      unittest-xml-reporting \
+      'dbf>=0.99.0'
 
 WORKDIR /workspace
 
