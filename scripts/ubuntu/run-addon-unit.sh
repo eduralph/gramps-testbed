@@ -54,6 +54,45 @@ docker run --rm \
     # extras syntax against absolute paths, so resolve via a relative path.
     (cd /workspace && pip install --break-system-packages --user -e "./gramps[testing]")
     export PATH="$HOME/.local/bin:$PATH"
+
+    # Auto-derive addon Python deps from requires_mod in every .gpr.py
+    # under addons-source/, then pip-install the union. Mirrors what
+    # Gramps Addon Manager does for an end user on Install click (see
+    # gramps/gui/plug/_windows.py __on_install_clicked → req.install →
+    # gen/utils/requirements.py). The .gpr.py files are the single
+    # source of truth — this keeps the test environment in sync with
+    # whatever the currently-checked-out addons-source declares, so
+    # new addon deps do not need a parallel update here.
+    echo "→ discovering addon deps from requires_mod declarations"
+    addon_mods=$(python3 - <<"PY"
+import ast, glob, re
+pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
+mods = set()
+for f in glob.glob("/workspace/addons-source/*/*.gpr.py"):
+    try:
+        text = open(f, encoding="utf-8").read()
+    except OSError:
+        continue
+    for m in pat.finditer(text):
+        try:
+            mods.update(ast.literal_eval(m.group(1)))
+        except (ValueError, SyntaxError):
+            pass
+print(" ".join(sorted(mods)))
+PY
+)
+    if [ -n "$addon_mods" ]; then
+      echo "→ addon deps: $addon_mods"
+      # Install one at a time so a single failing build (pygraphviz
+      # without graphviz-dev, psycopg2 without libpq-dev, etc.) does
+      # not abort the batch. The affected addon''s tests will skip or
+      # fail in isolation without blocking the rest.
+      for mod in $addon_mods; do
+        pip install --break-system-packages --user "$mod" \
+          || echo "× $mod failed to install (continuing)"
+      done
+    fi
+
     # Compile .mo translations so gramps.gen imports do not emit
     # "Missing or invalid localedir" during addon test collection.
     if [ ! -f /workspace/gramps/build/mo/de/LC_MESSAGES/gramps.mo ]; then
@@ -108,22 +147,34 @@ docker run --rm \
       # for any addon test that touches gramps.gen resource loading.
       out_dir="/workspace/gramps-testbed/test-results/$addon"
       mkdir -p "$out_dir"
-      # Run from the tests/ dir itself. Many addon tests/ dirs lack an
-      # __init__.py, so unittest cannot treat tests/ as an importable
-      # package; entering it makes tests/ the start+top dir, and the
-      # __file__-based sys.path hacks inside test_*.py still resolve the
-      # addon module (they use os.path.dirname(os.path.abspath(__file__))).
-      #
-      # PYTHONPATH pins /workspace/addons-source so tests that use
-      # package-style imports (from <Addon>.<mod> import ...) resolve via
-      # namespace-package lookup, matching the documented
-      # "PYTHONPATH=. python -m unittest ..." invocation used upstream.
+      # Collect dotted module paths (<Addon>.tests.<module>) and invoke
+      # unittest/xmlrunner with the module list, running from
+      # addons-source/. This mirrors how addons-source/.github/workflows/
+      # ci.yml calls the suite and how contributors invoke
+      # "python3 -m unittest <Addon>.tests.test_..." locally. Critically,
+      # loading a test via its dotted path — not via "discover" inside
+      # tests/ — puts the addon on sys.modules as a namespace package
+      # before the test body runs. That is the exact arrangement that
+      # surfaces package-shadowing bugs like bug 0012691, where
+      # "from <Addon> import <Addon>" binds the submodule instead of the
+      # class. Discover-from-tests/ hides the trap.
+      modules=()
+      for f in /workspace/addons-source/"$addon"/tests/test_*.py; do
+        [ -f "$f" ] || continue
+        rel="${f#/workspace/addons-source/}"
+        mod="${rel%.py}"
+        mod="${mod//\//.}"
+        modules+=( "$mod" )
+      done
+      if [ ${#modules[@]} -eq 0 ]; then
+        echo "× $addon: no test_*.py in tests/" >&2
+        fail=1
+        continue
+      fi
       (
-        cd "$test_dir"
+        cd /workspace/addons-source
         GRAMPS_RESOURCES=/workspace/gramps \
-        PYTHONPATH="/workspace/addons-source${PYTHONPATH:+:$PYTHONPATH}" \
-          python3 -m xmlrunner discover \
-            -p "test_*.py" \
+          python3 -m xmlrunner "${modules[@]}" \
             -o "$out_dir" \
             -v
       ) || fail=1

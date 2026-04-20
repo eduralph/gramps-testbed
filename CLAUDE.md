@@ -25,6 +25,14 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
   - ./scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
   - ./scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
+- Before pushing an addon-source change that touches tests or the addon
+  module itself, run `./scripts/ubuntu/run-addon-unit.sh <AddonName>` on
+  the PR branch. The runner loads each test via its dotted path
+  (`<Addon>.tests.<module>`) — the same form upstream's ci.yml uses —
+  which is what surfaces Python namespace-package traps that
+  `discover`-from-tests/ hides. Bug 0012691 was exactly this class of
+  bug: `from <Addon> import <Addon>` bound the submodule instead of the
+  class under dotted-path loading.
 - Platform-specific scripts live under ./scripts/<platform>/; today only
   scripts/ubuntu/ exists (Fedora/Arch/macOS/Windows equivalents are planned)
 - Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.0.8),
@@ -34,9 +42,11 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
 
 ## Status
 Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
-— the previous "smoke before all else" priority is cleared. No singular next
-focus yet; natural candidates are expanding interface coverage, porting
-scripts to other platforms, or scheduling the addon-unit suite.
+— the previous "smoke before all else" priority is cleared. Addon-unit suite
+is now scheduled (push/PR/nightly) and invokes tests via dotted path, so
+namespace-package bugs surface in the testbed. No singular next focus yet;
+natural candidates are expanding interface coverage or porting scripts to
+other platforms.
 
 ## CI gates and branch protection
 - `main` is protected by ruleset "main branch protection" (id 15262402):
@@ -55,7 +65,8 @@ scripts to other platforms, or scheduling the addon-unit suite.
   apt-installed PyGObject and everything that imports `gi` dies on load.
 - Adding a new Gramps minor: append to `matrix.gramps_ref` in
   unit-tests.yml and interface-tests.yml (keep them in sync).
-- Nightly drift crons fire 1-2h after upstream-sync (04:00 UTC): unit
-  tests 05:00, interface tests 05:30, docker build 06:00.
+- Nightly drift crons fire 1-2.5h after upstream-sync (04:00 UTC): unit
+  tests 05:00, interface tests 05:30, docker build 06:00, addon unit
+  tests 06:30.
 - `eduralph/gramps` and `eduralph/addons-source` carry a parallel
   "PRFirst" ruleset on `master` + `maintenance/gramps60` (no bypass).

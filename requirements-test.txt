@@ -1,2 +1,6 @@
 dogtail
 unittest-xml-reporting
+# Addon runtime deps (dbf, boto3, networkx, psycopg2, etc.) are NOT
+# listed here. The addon-unit workflow auto-derives them from
+# requires_mod declarations in addons-source/*/*.gpr.py at runtime,
+# matching what Gramps' Addon Manager installs for an end user.

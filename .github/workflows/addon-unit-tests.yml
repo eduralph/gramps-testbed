@@ -1,9 +1,16 @@
 name: Addon Unit Tests
 
-# No push/PR triggers: addon unit coverage is opt-in while the addon
-# ecosystem stabilises. Run manually against a single addon, a list, or
-# leave the input blank to run every addon that has tests/test_*.py.
 on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly drift check at 06:30 UTC — 2.5h after upstream-sync (04:00)
+    # and 30min after docker-build (06:00), keeping the existing
+    # staggered-by-30min cadence. Surfaces addon-side import/ABI
+    # regressions against fresh upstream, which is exactly the class of
+    # bug the testbed catches while addons-source's own CI stays green.
+    - cron: '30 6 * * *'
   workflow_dispatch:
     inputs:
       addons:
@@ -34,9 +41,12 @@ jobs:
   addon-unit-tests:
     runs-on: ubuntu-24.04
     timeout-minutes: 20
-    # No gate policy (continue-on-error) needed: workflow_dispatch-only
-    # triggers mean this job never blocks a PR merge. It's a manual
-    # diagnostic run, not a required check.
+    # Advisory gate. Addon tests run upstream addon code, so failures
+    # here usually reflect addon/upstream bugs rather than testbed
+    # issues. continue-on-error keeps the workflow conclusion green
+    # while the per-addon check-run surfaces the failing addon — same
+    # shape as unit-tests.yml.
+    continue-on-error: true
 
     steps:
       - name: Checkout testbed
@@ -102,6 +112,49 @@ jobs:
           # which some addon tests also import transitively.
           pip install -e 'gramps[testing]'
 
+      - name: Install addon runtime deps (derived from requires_mod)
+        # Auto-derive the union of requires_mod across every .gpr.py in
+        # the checked-out addons-source/. Mirrors Gramps' Addon Manager
+        # install path (gramps/gui/plug/_windows.py __on_install_clicked
+        # → req.install → gen/utils/requirements.py). Keeps the .gpr.py
+        # files as the single source of truth for addon deps — no
+        # parallel list to drift from upstream. Best-effort: a package
+        # that needs exotic system deps (e.g. pygraphviz → graphviz-dev)
+        # may fail here; the affected addon's tests will skip or fail in
+        # isolation without blocking the rest.
+        shell: bash
+        run: |
+          addon_mods=$(python3 - <<'PY'
+          import ast, glob, re
+          pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
+          mods = set()
+          for f in glob.glob("addons-source/*/*.gpr.py"):
+              try:
+                  text = open(f, encoding="utf-8").read()
+              except OSError:
+                  continue
+              for m in pat.finditer(text):
+                  try:
+                      mods.update(ast.literal_eval(m.group(1)))
+                  except (ValueError, SyntaxError):
+                      pass
+          print(" ".join(sorted(mods)))
+          PY
+          )
+          if [ -n "$addon_mods" ]; then
+            echo "→ addon deps: $addon_mods"
+            # Install one at a time so a single failing build
+            # (pygraphviz without graphviz-dev, psycopg2 without
+            # libpq-dev, etc.) does not abort the batch. The affected
+            # addon's tests will skip or fail in isolation.
+            for mod in $addon_mods; do
+              pip install "$mod" || \
+                echo "× $mod failed to install (continuing)"
+            done
+          else
+            echo "no requires_mod declarations found"
+          fi
+
       - name: Compile Gramps translations
         # Same rationale as unit-tests.yml: keeps gramps.gen imports quiet
         # during test collection.
@@ -115,10 +168,14 @@ jobs:
           done
 
       - name: Run addon unit tests
-        # Mirrors scripts/ubuntu/run-addon-unit.sh discovery. Each addon's
-        # tests/ dir is treated as the start+top dir because most addons
-        # do not ship tests/__init__.py; __file__-based sys.path hacks
-        # inside the tests resolve the addon module themselves.
+        # Mirrors scripts/ubuntu/run-addon-unit.sh. Each test module is
+        # loaded by its dotted path (<Addon>.tests.<module>) from
+        # addons-source/, matching the upstream invocation in
+        # addons-source/.github/workflows/ci.yml. Loading via dotted
+        # path — not discover-from-tests/ — puts the addon on
+        # sys.modules as a namespace package before the test body runs,
+        # which is the exact arrangement that exposes package-shadowing
+        # traps like bug 0012691. Discover inside tests/ hides them.
         env:
           GRAMPS_RESOURCES: ${{ github.workspace }}/gramps
           ADDONS: ${{ github.event.inputs.addons }}
@@ -157,10 +214,22 @@ jobs:
             echo "=== $addon ==="
             out_dir="$GITHUB_WORKSPACE/gramps-testbed/test-results/$addon"
             mkdir -p "$out_dir"
+            modules=()
+            for f in "$GITHUB_WORKSPACE"/addons-source/"$addon"/tests/test_*.py; do
+              [ -f "$f" ] || continue
+              rel="${f#$GITHUB_WORKSPACE/addons-source/}"
+              mod="${rel%.py}"
+              mod="${mod//\//.}"
+              modules+=( "$mod" )
+            done
+            if [ ${#modules[@]} -eq 0 ]; then
+              echo "× $addon: no test_*.py in tests/" >&2
+              fail=1
+              continue
+            fi
             (
-              cd "$test_dir"
-              python -m xmlrunner discover \
-                -p 'test_*.py' \
+              cd "$GITHUB_WORKSPACE/addons-source"
+              python -m xmlrunner "${modules[@]}" \
                 -o "$out_dir" \
                 -v
             ) || fail=1
