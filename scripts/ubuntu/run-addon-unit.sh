@@ -158,9 +158,20 @@ PY
       # surfaces package-shadowing bugs like bug 0012691, where
       # "from <Addon> import <Addon>" binds the submodule instead of the
       # class. Discover-from-tests/ hides the trap.
+      # Filename convention (mirrors addons-source/.github/workflows/ci.yml):
+      #   test_*.py              general — every platform
+      #   test_linux_*.py        Linux-only
+      #   test_windows_*.py      Windows-only (skipped here)
+      #   test_integration_*.py  Linux-only, full-pipeline/DB-backed
+      # This is the Ubuntu runner, so test_windows_* is excluded. When
+      # scripts/windows/run-addon-unit.sh is added it will do the inverse
+      # (skip test_linux_*/test_integration_*).
       modules=()
       for f in /workspace/addons-source/"$addon"/tests/test_*.py; do
         [ -f "$f" ] || continue
+        case "$(basename "$f")" in
+          test_windows_*) continue ;;
+        esac
         rel="${f#/workspace/addons-source/}"
         mod="${rel%.py}"
         mod="${mod//\//.}"
