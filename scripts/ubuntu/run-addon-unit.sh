@@ -54,6 +54,45 @@ docker run --rm \
     # extras syntax against absolute paths, so resolve via a relative path.
     (cd /workspace && pip install --break-system-packages --user -e "./gramps[testing]")
     export PATH="$HOME/.local/bin:$PATH"
+
+    # Auto-derive addon Python deps from requires_mod in every .gpr.py
+    # under addons-source/, then pip-install the union. Mirrors what
+    # Gramps Addon Manager does for an end user on Install click (see
+    # gramps/gui/plug/_windows.py __on_install_clicked → req.install →
+    # gen/utils/requirements.py). The .gpr.py files are the single
+    # source of truth — this keeps the test environment in sync with
+    # whatever the currently-checked-out addons-source declares, so
+    # new addon deps do not need a parallel update here.
+    echo "→ discovering addon deps from requires_mod declarations"
+    addon_mods=$(python3 - <<"PY"
+import ast, glob, re
+pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
+mods = set()
+for f in glob.glob("/workspace/addons-source/*/*.gpr.py"):
+    try:
+        text = open(f, encoding="utf-8").read()
+    except OSError:
+        continue
+    for m in pat.finditer(text):
+        try:
+            mods.update(ast.literal_eval(m.group(1)))
+        except (ValueError, SyntaxError):
+            pass
+print(" ".join(sorted(mods)))
+PY
+)
+    if [ -n "$addon_mods" ]; then
+      echo "→ addon deps: $addon_mods"
+      # Install one at a time so a single failing build (pygraphviz
+      # without graphviz-dev, psycopg2 without libpq-dev, etc.) does
+      # not abort the batch. The affected addon''s tests will skip or
+      # fail in isolation without blocking the rest.
+      for mod in $addon_mods; do
+        pip install --break-system-packages --user "$mod" \
+          || echo "× $mod failed to install (continuing)"
+      done
+    fi
+
     # Compile .mo translations so gramps.gen imports do not emit
     # "Missing or invalid localedir" during addon test collection.
     if [ ! -f /workspace/gramps/build/mo/de/LC_MESSAGES/gramps.mo ]; then

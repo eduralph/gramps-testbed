@@ -39,14 +39,15 @@ ENV LANG=en_US.UTF-8 \
     LANGUAGE=en_US:en
 
 # dogtail + JUnit XML writer for unittest (pyatspi comes from python3-pyatspi apt package).
-# dbf is an addon runtime dep (TMGimporter/libtmg.py imports it under a
-# try/except that only logs a warning on failure, so tests hit NameError
-# on Table later if dbf is absent). Bake it in so addon-unit tests can
-# exercise the integration paths without extra setup.
+# Addon runtime deps (dbf, boto3, networkx, psycopg2, etc.) are NOT baked
+# in here — the run-addon-unit.sh entrypoint auto-derives them at
+# container start from requires_mod declarations in the currently
+# checked-out addons-source/*/*.gpr.py files. That way the image stays
+# generic and the addon dep list is single-sourced from the .gpr.py
+# files (the same data Gramps' Addon Manager consumes for end users).
 RUN pip3 install --break-system-packages --no-cache-dir \
       dogtail \
-      unittest-xml-reporting \
-      'dbf>=0.99.0'
+      unittest-xml-reporting
 
 WORKDIR /workspace
 

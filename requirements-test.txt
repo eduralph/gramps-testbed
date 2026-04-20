@@ -1,6 +1,6 @@
 dogtail
 unittest-xml-reporting
-# Addon runtime dep: TMGimporter/libtmg.py imports `dbf` under a try/except
-# that only logs on ImportError, so tests crash later with NameError on
-# Table unless dbf is present.
-dbf>=0.99.0
+# Addon runtime deps (dbf, boto3, networkx, psycopg2, etc.) are NOT
+# listed here. The addon-unit workflow auto-derives them from
+# requires_mod declarations in addons-source/*/*.gpr.py at runtime,
+# matching what Gramps' Addon Manager installs for an end user.
