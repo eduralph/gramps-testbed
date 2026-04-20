@@ -108,22 +108,34 @@ docker run --rm \
       # for any addon test that touches gramps.gen resource loading.
       out_dir="/workspace/gramps-testbed/test-results/$addon"
       mkdir -p "$out_dir"
-      # Run from the tests/ dir itself. Many addon tests/ dirs lack an
-      # __init__.py, so unittest cannot treat tests/ as an importable
-      # package; entering it makes tests/ the start+top dir, and the
-      # __file__-based sys.path hacks inside test_*.py still resolve the
-      # addon module (they use os.path.dirname(os.path.abspath(__file__))).
-      #
-      # PYTHONPATH pins /workspace/addons-source so tests that use
-      # package-style imports (from <Addon>.<mod> import ...) resolve via
-      # namespace-package lookup, matching the documented
-      # "PYTHONPATH=. python -m unittest ..." invocation used upstream.
+      # Collect dotted module paths (<Addon>.tests.<module>) and invoke
+      # unittest/xmlrunner with the module list, running from
+      # addons-source/. This mirrors how addons-source/.github/workflows/
+      # ci.yml calls the suite and how contributors invoke
+      # "python3 -m unittest <Addon>.tests.test_..." locally. Critically,
+      # loading a test via its dotted path — not via "discover" inside
+      # tests/ — puts the addon on sys.modules as a namespace package
+      # before the test body runs. That is the exact arrangement that
+      # surfaces package-shadowing bugs like bug 0012691, where
+      # "from <Addon> import <Addon>" binds the submodule instead of the
+      # class. Discover-from-tests/ hides the trap.
+      modules=()
+      for f in /workspace/addons-source/"$addon"/tests/test_*.py; do
+        [ -f "$f" ] || continue
+        rel="${f#/workspace/addons-source/}"
+        mod="${rel%.py}"
+        mod="${mod//\//.}"
+        modules+=( "$mod" )
+      done
+      if [ ${#modules[@]} -eq 0 ]; then
+        echo "× $addon: no test_*.py in tests/" >&2
+        fail=1
+        continue
+      fi
       (
-        cd "$test_dir"
+        cd /workspace/addons-source
         GRAMPS_RESOURCES=/workspace/gramps \
-        PYTHONPATH="/workspace/addons-source${PYTHONPATH:+:$PYTHONPATH}" \
-          python3 -m xmlrunner discover \
-            -p "test_*.py" \
+          python3 -m xmlrunner "${modules[@]}" \
             -o "$out_dir" \
             -v
       ) || fail=1
