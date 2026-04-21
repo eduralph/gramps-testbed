@@ -47,7 +47,7 @@ docker run --rm \
   -w /workspace \
   -e "TARGET_ADDONS=$TARGET_ADDONS" \
   "$IMAGE" \
-  bash -lc '
+  bash -c '
     set -e
     # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
     # which some addon tests also import transitively. pip rejects the

@@ -28,7 +28,7 @@ docker run --rm \
   -v "$WORKSPACE":/workspace \
   -w /workspace/gramps-testbed \
   "$IMAGE" \
-  bash -lc '
+  bash -c '
     set -e
     # Extras syntax rejects absolute paths — resolve via a relative path.
     (cd /workspace && pip install --break-system-packages --user -e "./gramps[testing]")
