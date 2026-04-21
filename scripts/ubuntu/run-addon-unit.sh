@@ -49,10 +49,28 @@ docker run --rm \
   "$IMAGE" \
   bash -c '
     set -e
+    # Clear stale XMLs / logs so accumulated runs do not pollute the summary.
+    # Created early so pip install logs land under install-logs/ too.
+    results_dir="/workspace/gramps-testbed/test-results"
+    install_logs="$results_dir/install-logs"
+    rm -rf "$results_dir"
+    mkdir -p "$install_logs"
+
     # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
     # which some addon tests also import transitively. pip rejects the
     # extras syntax against absolute paths, so resolve via a relative path.
-    (cd /workspace && pip install --break-system-packages --user -e "./gramps[testing]")
+    # Quiet mode + log capture: on failure we tail the log and surface the
+    # path; on success nothing is printed so the runs-for-every-invocation
+    # noise does not drown the actual test output.
+    gramps_log="$install_logs/gramps-testing.log"
+    if ! (cd /workspace && pip install --break-system-packages --user \
+            --progress-bar off -q --no-warn-script-location \
+            -e "./gramps[testing]") \
+            >"$gramps_log" 2>&1; then
+      echo "× gramps[testing] install failed — last 40 lines of $gramps_log:" >&2
+      tail -n 40 "$gramps_log" >&2
+      exit 1
+    fi
     export PATH="$HOME/.local/bin:$PATH"
 
     # Auto-derive addon Python deps from requires_mod in every .gpr.py
@@ -81,17 +99,28 @@ for f in glob.glob("/workspace/addons-source/*/*.gpr.py"):
 print(" ".join(sorted(mods)))
 PY
 )
+    pip_failures=()
     if [ -n "$addon_mods" ]; then
       echo "→ addon deps: $addon_mods"
       # Install one at a time so a single failing build (pygraphviz
       # without graphviz-dev, psycopg2 without libpq-dev, etc.) does
       # not abort the batch. The affected addon''s tests will skip or
-      # fail in isolation without blocking the rest.
+      # fail in isolation without blocking the rest. Each install
+      # streams to its own log; only failures print to the terminal.
       for mod in $addon_mods; do
-        pip install --break-system-packages --user "$mod" \
-          || echo "× $mod failed to install (continuing)"
+        mod_log="$install_logs/$mod.log"
+        if pip install --break-system-packages --user \
+             --progress-bar off -q --no-warn-script-location \
+             "$mod" >"$mod_log" 2>&1; then
+          :
+        else
+          pip_failures+=( "$mod" )
+          echo "  × $mod failed — see install-logs/$mod.log"
+        fi
       done
     fi
+    # Drop zero-byte logs so install-logs/ retains only real failures.
+    find "$install_logs" -type f -empty -delete 2>/dev/null || true
 
     # Compile .mo translations so gramps.gen imports do not emit
     # "Missing or invalid localedir" during addon test collection.
@@ -104,10 +133,6 @@ PY
         msgfmt "$po" -o "$dest/gramps.mo"
       done
     fi
-
-    # Clear stale XMLs so accumulated runs do not pollute JUnit summaries.
-    rm -rf /workspace/gramps-testbed/test-results
-    mkdir -p /workspace/gramps-testbed/test-results
 
     # Resolve target addon list.
     if [ -n "${TARGET_ADDONS:-}" ]; then
@@ -133,10 +158,12 @@ PY
     echo "→ addon unit tests: ${addons[*]}"
 
     fail=0
+    summary_lines=()
     for addon in "${addons[@]}"; do
       test_dir="/workspace/addons-source/$addon/tests"
       if [ ! -d "$test_dir" ]; then
         echo "× $addon: addons-source/$addon/tests/ not found" >&2
+        summary_lines+=( "$(printf "  %-30s  SKIP (tests/ not found)" "$addon")" )
         fail=1
         continue
       fi
@@ -145,7 +172,7 @@ PY
       # Each addon gets its own results subdir so JUnit class/file names do
       # not collide across addons. GRAMPS_RESOURCES pins the resource root
       # for any addon test that touches gramps.gen resource loading.
-      out_dir="/workspace/gramps-testbed/test-results/$addon"
+      out_dir="$results_dir/$addon"
       mkdir -p "$out_dir"
       # Collect dotted module paths (<Addon>.tests.<module>) and invoke
       # unittest/xmlrunner with the module list, running from
@@ -179,16 +206,45 @@ PY
       done
       if [ ${#modules[@]} -eq 0 ]; then
         echo "× $addon: no test_*.py in tests/" >&2
+        summary_lines+=( "$(printf "  %-30s  SKIP (no test_*.py)" "$addon")" )
         fail=1
         continue
       fi
+      # Tee xmlrunner output to a per-addon log so the summary at the end
+      # can point at a file with the full -v trace, including failures.
+      run_log="$out_dir/_run.log"
       (
         cd /workspace/addons-source
         GRAMPS_RESOURCES=/workspace/gramps \
           python3 -m xmlrunner "${modules[@]}" \
             -o "$out_dir" \
             -v
-      ) || fail=1
+      ) 2>&1 | tee "$run_log"
+      rc=${PIPESTATUS[0]}
+      # Parse "Ran N tests in Xs" and the trailing OK/FAILED line to build
+      # a one-line summary entry. Tolerant of Python-exception aborts that
+      # produce no "Ran" line at all (ran stays "?").
+      ran=$(grep -oE "Ran [0-9]+ tests" "$run_log" | tail -n 1 | grep -oE "[0-9]+" || true)
+      ran="${ran:-?}"
+      if [ "$rc" -eq 0 ]; then
+        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests)" "$addon" "$ran")" )
+      else
+        fail=1
+        detail=$(grep -oE "FAILED \([^)]*\)" "$run_log" | tail -n 1 || true)
+        detail="${detail:-crashed}"
+        summary_lines+=( "$(printf "  %-30s  FAIL  (%s tests, %s)" "$addon" "$ran" "$detail")" )
+      fi
     done
+
+    echo
+    echo "=== Summary ==="
+    for line in "${summary_lines[@]}"; do
+      echo "$line"
+    done
+    echo
+    echo "→ JUnit XMLs + per-addon _run.log: gramps-testbed/test-results/<addon>/"
+    if [ ${#pip_failures[@]} -gt 0 ]; then
+      echo "→ pip install logs (${#pip_failures[@]} failure(s)): gramps-testbed/test-results/install-logs/"
+    fi
     exit $fail
   '
