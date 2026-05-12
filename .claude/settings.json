@@ -46,7 +46,14 @@
       "Edit(**)",
       "Write(**)",
       "Glob",
-      "Grep"
+      "Grep",
+      "Bash(python3:*)",
+      "Bash(python:*)",
+      "Bash(cd *)",
+      "Bash(PYTHONPYCACHEPREFIX=*:*)",
+      "Bash(PYTHONPATH=*:*)",
+      "Bash(pip show:*)",
+      "Bash(pip list:*)"
     ],
     "deny": [
       "Bash(sudo:*)",
