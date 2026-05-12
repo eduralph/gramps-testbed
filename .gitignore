@@ -11,3 +11,4 @@ artifacts/
 .mypy_cache/
 .DS_Store
 .claude/settings.local.json
+fetch_comments.py
