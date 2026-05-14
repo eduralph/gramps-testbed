@@ -29,7 +29,7 @@ docker run --rm \
   -v "$WORKSPACE":/workspace \
   -w /workspace/gramps \
   "$IMAGE" \
-  bash -lc '
+  bash -c '
     set -e
     # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
     # which some of the upstream *_test.py files import. pip rejects the

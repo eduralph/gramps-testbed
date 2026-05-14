@@ -133,4 +133,4 @@ docker run --rm -it \
   -e "GRAMPSHOME=/home/runner/gramps-home" \
   -w /workspace/gramps-testbed \
   "$IMAGE" \
-  bash -lc "$INNER"
+  bash -c "$INNER"
