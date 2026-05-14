@@ -51,6 +51,66 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   by the wrapper scripts so different Gramps versions get different tags
 - Do not edit files in ../gramps or ../addons-source without explicit instruction
 
+## Upstream fix workflow (gramps / addons-source forks)
+Fixes to Gramps and its addons are developed in the `../gramps` and
+`../addons-source` forks and submitted as PRs to `gramps-project/*`.
+The editing ban above still holds — work in either fork only on explicit
+instruction. This section complements the global engineering rules in
+`~/.claude/CLAUDE.md`; it does not repeat them.
+
+- **Branch targeting.** A fix targets the branch the bug lives on.
+  Stable-channel fixes go to `maintenance/gramps60` (the default working
+  branch for both forks); `master`-only changes target `master`. An
+  addon change must sit on the branch matching the Gramps version it
+  targets.
+- **Cherry-picking across gramps60 / gramps61 / master is a correctness
+  check, not a `git cherry-pick` check.** The branches' implementation
+  code diverges (e.g. addons-source PR 829 rewrote GExiv2 version
+  handling on gramps61 only). A patch that applies with no conflict can
+  still be wrong on the target branch — a `requires_gi` / version pin /
+  declaration is only correct relative to the code it describes. Verify
+  against the target branch's *related* code, including files the patch
+  doesn't touch. "Applies cleanly" is not "remains correct."
+- **Cite the upstream reference.** State the exact upstream file and
+  line(s) the fix was checked against — open `gramps-project/gramps` or
+  `gramps-project/addons-source` and cite `path:lines` (plus a SHA when
+  it matters). Recollection is a hypothesis, not a verification.
+- **Check upstream isn't already ahead.** Before calling a bug unfixed,
+  grep recent upstream commits and open PRs for the same symptom — a
+  fix may have landed on `master` but not yet on `maintenance/gramps60`.
+- **One logical fix per PR.** The lint/compile backlog is deliberately
+  one PR per addon per issue; keep it that way. Bundling hides mistakes.
+- **Ship the means to verify.** Prefer a regression test in the same PR
+  — an interface test for testbed-supported code, a `unittest.TestCase`
+  for unit-testable code like libtmg. When a test is genuinely
+  impractical (GUI-only paths, dead-code deletion), say so explicitly in
+  the PR body with a short rationale or manual repro.
+- **Edit the source, never the live plugin dir.** Addon changes go in
+  `../addons-source/`. The auto-sync runs source → installed plugin
+  (`~/.local/share/gramps/gramps60/plugins/…`) one way only; edits made
+  directly in the plugin dir are silently lost on the next source save.
+- **PR description format:**
+
+  ```
+  ## Root cause
+  <two sentences>
+
+  ## Fix
+  <what the diff does>
+
+  ## Verified against
+  - gramps-project/<repo>@<sha>:<path>:<lines>
+
+  ## Test
+  <link to the test, or rationale for why none applies + manual repro>
+  ```
+
+- **Eduard's review gate (not Claude's to perform).** Eduard opens fork
+  PRs as draft and re-reads with fresh eyes before marking ready — solo
+  forks have no second reviewer. Claude commits and stops there; pushing,
+  opening PRs, and marking them ready happen only on Eduard's explicit
+  instruction.
+
 ## Status
 Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
 — the previous "smoke before all else" priority is cleared. Addon-unit suite
