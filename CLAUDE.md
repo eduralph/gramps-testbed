@@ -67,6 +67,14 @@ instruction. This section complements the global engineering rules in
   cleanups alike — goes on the maintenance branch and is forward-merged
   from there. Only genuinely new-feature work targets `master`. An addon
   change must sit on the branch matching the Gramps version it targets.
+- **Reviewer instruction beats default targeting.** When a maintainer
+  on a specific PR has explicitly asked for a particular base branch,
+  honour that — the targeting default above is the rule, an explicit
+  request from a reviewer is the override. Before retargeting any PR,
+  read its review thread for instructions of this kind. Example:
+  gramps-project/gramps#2299, where Nick-Hall asked for `master` on a
+  bug-fix PR ("Please rebase this on the *master* branch."); the
+  master targeting stands until he says otherwise.
 - **Cherry-picking across gramps60 / gramps61 / master is a correctness
   check, not a `git cherry-pick` check.** The branches' implementation
   code diverges (e.g. addons-source PR 829 rewrote GExiv2 version
