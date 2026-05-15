@@ -58,11 +58,15 @@ The editing ban above still holds — work in either fork only on explicit
 instruction. This section complements the global engineering rules in
 `~/.claude/CLAUDE.md`; it does not repeat them.
 
-- **Branch targeting.** A fix targets the branch the bug lives on.
-  Stable-channel fixes go to `maintenance/gramps60` (the default working
-  branch for both forks); `master`-only changes target `master`. An
-  addon change must sit on the branch matching the Gramps version it
-  targets.
+- **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
+  the current production branch — the latest `maintenance/gramps*`
+  (today `maintenance/gramps60`, the default working branch for both
+  forks), not `master`. Per jralls on gramps-project/gramps#2298:
+  `master` is for new features and doesn't reach users until the next
+  major release, so anything users should get sooner — fixes and
+  cleanups alike — goes on the maintenance branch and is forward-merged
+  from there. Only genuinely new-feature work targets `master`. An addon
+  change must sit on the branch matching the Gramps version it targets.
 - **Cherry-picking across gramps60 / gramps61 / master is a correctness
   check, not a `git cherry-pick` check.** The branches' implementation
   code diverges (e.g. addons-source PR 829 rewrote GExiv2 version
