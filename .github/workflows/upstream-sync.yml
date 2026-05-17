@@ -1,8 +1,21 @@
 name: Sync Forks from Upstream
 
-# Rebases your forks onto upstream so they stay fast-forward-mergeable.
-# Runs nightly and on demand. Uses a PAT in secrets.FORK_SYNC_TOKEN with
-# repo write access to eduralph/gramps and eduralph/addons-source.
+# Keeps your forks of gramps-project/{gramps,addons-source} in sync with
+# upstream by opening (or updating) a "sync from upstream" PR for each
+# matrix cell. Runs nightly and on demand.
+#
+# Why this opens a PR instead of fast-forwarding directly:
+#  * The forks carry a "PRFirst" branch ruleset (no bypass) on master
+#    and maintenance/gramps60, so direct push is rejected — the previous
+#    `gh repo sync` implementation could never have worked even with a
+#    valid token.
+#  * The forks frequently diverge from upstream because we cherry-pick
+#    CI/CD work onto the fork's mainline. `gh repo sync` rejects any
+#    divergence outright; a merge commit reconciles cleanly.
+#
+# Requirements: a fine-grained PAT in `secrets.FORK_SYNC_TOKEN` with
+# Contents:write + Pull-requests:write on the eduralph/gramps and
+# eduralph/addons-source repos.
 
 on:
   schedule:
@@ -25,10 +38,106 @@ jobs:
           - maintenance/gramps60
 
     steps:
-      - name: Sync ${{ matrix.repo.name }}@${{ matrix.branch }}
+      - name: Verify FORK_SYNC_TOKEN is configured
+        env:
+          TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            cat >&2 <<'EOF'
+          ✗ FORK_SYNC_TOKEN repository secret is not set on this repo.
+
+          Without it, the sync workflow cannot push to the forks. To fix:
+            1. Create a fine-grained PAT at
+                 https://github.com/settings/personal-access-tokens/new
+               scoped to eduralph/gramps + eduralph/addons-source with
+                 Contents: read & write
+                 Pull requests: read & write
+            2. Add it as a repo secret on this testbed:
+                 gh secret set FORK_SYNC_TOKEN -R <this-repo>
+          EOF
+            exit 1
+          fi
+
+      - name: Sync ${{ matrix.repo.owner }}/${{ matrix.repo.name }}@${{ matrix.branch }}
         env:
           GH_TOKEN: ${{ secrets.FORK_SYNC_TOKEN }}
+          FORK: ${{ matrix.repo.owner }}/${{ matrix.repo.name }}
+          BRANCH: ${{ matrix.branch }}
+          UPSTREAM_OWNER: gramps-project
         run: |
-          gh repo sync ${{ matrix.repo.owner }}/${{ matrix.repo.name }} \
-            --source gramps-project/${{ matrix.repo.name }} \
-            --branch ${{ matrix.branch }}
+          set -euo pipefail
+
+          UPSTREAM="$UPSTREAM_OWNER/${FORK#*/}"
+          SYNC_BRANCH="sync/upstream-${BRANCH//\//-}-auto"
+
+          # Clone the fork with the PAT and add upstream as a second remote.
+          git clone "https://x-access-token:${GH_TOKEN}@github.com/${FORK}.git" fork
+          cd fork
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream "https://github.com/${UPSTREAM}.git"
+          git fetch --quiet origin "$BRANCH"
+          git fetch --quiet upstream "$BRANCH"
+          # Always anchor the checkout to origin/<branch> explicitly.
+          # `git checkout <branch>` errors with "matched multiple remote
+          # tracking branches" when both origin and upstream have the
+          # branch and there's no local branch yet (i.e. for every branch
+          # except the fork's default that `git clone` checked out).
+          git checkout -B "$BRANCH" "origin/$BRANCH"
+
+          BEHIND="$(git rev-list --count "HEAD..upstream/${BRANCH}")"
+          AHEAD="$(git rev-list --count "upstream/${BRANCH}..HEAD")"
+          echo "Fork is ${AHEAD} ahead and ${BEHIND} behind upstream/${BRANCH}."
+
+          if [ "$BEHIND" -eq 0 ]; then
+            echo "✓ Fork is already up to date with upstream — nothing to sync."
+            # Close a stale sync PR if one exists.
+            if gh pr view "$SYNC_BRANCH" --repo "$FORK" --json state \
+                 --jq '.state' 2>/dev/null | grep -q OPEN; then
+              gh pr close "$SYNC_BRANCH" --repo "$FORK" \
+                --comment "Closing automatically: upstream merged or rebased; nothing to sync."
+            fi
+            exit 0
+          fi
+
+          # Start the sync branch fresh from the fork's current head and
+          # merge upstream into it. Force-push so a previously-open sync PR
+          # (if any) updates with the new merge result rather than diverging.
+          git checkout -B "$SYNC_BRANCH" "$BRANCH"
+
+          if git merge --no-edit --no-ff "upstream/${BRANCH}" \
+               -m "Sync ${FORK#*/}@${BRANCH} with upstream/${UPSTREAM_OWNER} ($(date -u +%Y-%m-%d))"; then
+            echo "✓ Clean merge."
+            # The sync branch is workflow-owned (never collaborated on),
+            # and we rebuild it from BRANCH each run, so the local SHA
+            # differs from any previous run's remote SHA even when the
+            # merge result is identical. Force-push is correct here.
+            git push --force origin "$SYNC_BRANCH"
+          else
+            CONFLICTS="$(git diff --name-only --diff-filter=U)"
+            git merge --abort
+            cat >&2 <<EOF
+          ✗ Merge conflict syncing ${FORK}@${BRANCH} from upstream:
+
+          $CONFLICTS
+
+          Resolve manually (see scripts/sync-fork-manual.md or the previous
+          manual sync PRs for the pattern).
+          EOF
+            exit 1
+          fi
+
+          # Open the PR if it isn't already open (the force-push updated
+          # it if it was). The base branch is the fork's protected branch;
+          # PRFirst requires the merge to land via PR.
+          if gh pr view "$SYNC_BRANCH" --repo "$FORK" --json state \
+               --jq '.state' 2>/dev/null | grep -q OPEN; then
+            echo "✓ Existing PR updated via force-push."
+            gh pr view "$SYNC_BRANCH" --repo "$FORK" --json url --jq '.url'
+          else
+            gh pr create --repo "$FORK" \
+              --base "$BRANCH" \
+              --head "$SYNC_BRANCH" \
+              --title "Sync ${FORK#*/}@${BRANCH} with upstream ($(date -u +%Y-%m-%d))" \
+              --body "Automated nightly sync from \`${UPSTREAM}@${BRANCH}\`. Generated by .github/workflows/upstream-sync.yml on the testbed."
+          fi
