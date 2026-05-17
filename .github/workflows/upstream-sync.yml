@@ -76,8 +76,14 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream "https://github.com/${UPSTREAM}.git"
+          git fetch --quiet origin "$BRANCH"
           git fetch --quiet upstream "$BRANCH"
-          git checkout "$BRANCH"
+          # Always anchor the checkout to origin/<branch> explicitly.
+          # `git checkout <branch>` errors with "matched multiple remote
+          # tracking branches" when both origin and upstream have the
+          # branch and there's no local branch yet (i.e. for every branch
+          # except the fork's default that `git clone` checked out).
+          git checkout -B "$BRANCH" "origin/$BRANCH"
 
           BEHIND="$(git rev-list --count "HEAD..upstream/${BRANCH}")"
           AHEAD="$(git rev-list --count "upstream/${BRANCH}..HEAD")"
