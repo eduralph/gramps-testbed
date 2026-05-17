@@ -12,3 +12,4 @@ artifacts/
 .DS_Store
 .claude/settings.local.json
 fetch_comments.py
+GrampsAddonsUserManual6.0.pdf

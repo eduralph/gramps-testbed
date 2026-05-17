@@ -47,16 +47,32 @@ docker run --rm \
         msgfmt "$po" -o "$dest/gramps.mo"
       done
     fi
-    # Addons are intentionally not built or installed for the smoke suite:
+    # Bulk addon install is intentionally skipped for the smoke suite:
     #   * make.py mutates tracked .gpr.py files (version bumps), which would
     #     dirty the addons-source fork — it is expected to stay a pure mirror
     #     of upstream.
     #   * Installing all 149 addons blocks Gramps GUI startup during plugin
     #     registration anyway.
-    # When addon-aware interface tests are added, do the build in a scratch
-    # copy (e.g. cp -a /workspace/addons-source /tmp/build && cd /tmp/build).
-    # seed example tree
+    # Individual addons that have dedicated interface tests are installed
+    # below by copying the source directory straight into USER_PLUGINS — no
+    # make.py invocation, no mutation of addons-source. Keep this list as
+    # tight as the tests require; every entry adds startup cost.
+    USER_PLUGINS="$(python3 -c "from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)")"
+    mkdir -p "$USER_PLUGINS"
+    for addon in QuiltView; do
+      src="/workspace/addons-source/$addon"
+      if [ -d "$src" ]; then
+        rm -rf "$USER_PLUGINS/$addon"
+        cp -a "$src" "$USER_PLUGINS/$addon"
+        echo "→ installed addon: $addon"
+      else
+        echo "WARN: addon source not found: $src (skipping install)"
+      fi
+    done
+    # seed trees
     gramps -C TestTree -i /workspace/gramps/example/gramps/example.gramps
+    gramps -C QuiltViewTree \
+           -i /workspace/gramps-testbed/tests/interface/data/quiltview_minimal.gramps
     # Clear stale XMLs so accumulated runs do not pollute JUnit summaries.
     rm -rf /workspace/gramps-testbed/test-results
     mkdir -p /workspace/gramps-testbed/test-results
