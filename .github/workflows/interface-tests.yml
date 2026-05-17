@@ -143,14 +143,34 @@ jobs:
             msgfmt "$po" -o "$dest/gramps.mo"
           done
 
-      # Addons are intentionally not built or installed for the smoke suite:
+      # Bulk addon install is intentionally skipped for the smoke suite:
       # make.py mutates tracked .gpr.py files, and installing all 149 addons
-      # blocks Gramps GUI startup during plugin registration. The addon_name
-      # workflow input remains reserved for a future addon-aware job.
+      # blocks Gramps GUI startup during plugin registration. Individual
+      # addons that have dedicated interface tests are copied straight into
+      # USER_PLUGINS below — no make.py invocation, no mutation of
+      # addons-source. Keep this list as tight as the tests require; every
+      # entry adds startup cost. Kept in sync with the equivalent block in
+      # scripts/ubuntu/run-interface.sh.
+      - name: Install per-test addons
+        run: |
+          USER_PLUGINS="$(python -c 'from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)')"
+          mkdir -p "$USER_PLUGINS"
+          for addon in QuiltView; do
+            src="addons-source/$addon"
+            if [ -d "$src" ]; then
+              rm -rf "$USER_PLUGINS/$addon"
+              cp -a "$src" "$USER_PLUGINS/$addon"
+              echo "→ installed addon: $addon"
+            else
+              echo "WARN: addon source not found: $src (skipping install)"
+            fi
+          done
 
-      - name: Seed example database
+      - name: Seed example databases
         run: |
           gramps -C TestTree -i gramps/example/gramps/example.gramps
+          gramps -C QuiltViewTree \
+                 -i gramps-testbed/tests/interface/data/quiltview_minimal.gramps
 
       - name: Run interface tests
         working-directory: gramps-testbed
