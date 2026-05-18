@@ -104,10 +104,15 @@ jobs:
         # only visible to that interpreter. Inheriting it via venv keeps
         # `pip install` writes contained while gramps.gen's `import gi`
         # still resolves at test-collection time.
+        #
+        # MSYS2 MINGW64 Python uses POSIX-style venv layout (bin/), not
+        # Windows-native CPython's Scripts/. Its interpreter ships at
+        # /mingw64/bin/python.exe and venvs it creates follow the same
+        # convention. Using Scripts/ here would 127 on `not found`.
         run: |
           /mingw64/bin/python -m venv --system-site-packages .venv
-          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/Scripts" >> "$GITHUB_PATH"
-          .venv/Scripts/python -m pip install --upgrade pip
+          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m pip install --upgrade pip
 
       - name: Restore pip cache
         # actions/cache scopes the key by runner.os automatically

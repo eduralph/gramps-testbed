@@ -71,8 +71,10 @@ if [[ ! -d "$VENV" ]]; then
   echo "→ creating venv at $VENV"
   /mingw64/bin/python -m venv --system-site-packages "$VENV"
 fi
+# MSYS2 MINGW64 Python uses POSIX venv layout (bin/), not Windows
+# CPython's Scripts/ — see windows-unit-tests.yml for rationale.
 # shellcheck disable=SC1091
-source "$VENV/Scripts/activate"
+source "$VENV/bin/activate"
 python -m pip install --upgrade pip
 
 pip install -r "$WORKSPACE/gramps-testbed/requirements-test.txt"

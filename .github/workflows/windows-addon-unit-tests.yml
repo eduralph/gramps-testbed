@@ -100,10 +100,13 @@ jobs:
             https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
 
       - name: Set up Python venv (inherits gi/cairo/icu from pacman)
+        # MSYS2 MINGW64 Python uses POSIX-style venv layout (bin/), not
+        # Windows-native CPython's Scripts/ — see windows-unit-tests.yml
+        # for the longer rationale.
         run: |
           /mingw64/bin/python -m venv --system-site-packages .venv
-          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/Scripts" >> "$GITHUB_PATH"
-          .venv/Scripts/python -m pip install --upgrade pip
+          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m pip install --upgrade pip
 
       - name: Restore pip cache
         uses: actions/cache@v4
