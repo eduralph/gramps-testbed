@@ -48,13 +48,20 @@ PACMAN_PKGS=(
   mingw-w64-x86_64-gtk3
   mingw-w64-x86_64-osm-gps-map
   mingw-w64-x86_64-goocanvas
-  mingw-w64-x86_64-gexiv2
   mingw-w64-x86_64-gettext
   intltool
 )
 
+# Pinned-URL packages — see scripts/windows/run-unit.sh for rationale.
+# Kept in sync with aio/build.sh.
+PACMAN_URL_PKGS=(
+  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+)
+
 echo "→ ensuring MSYS2 packages are installed"
 pacman -S --needed --noconfirm "${PACMAN_PKGS[@]}"
+pacman -U --needed --noconfirm "${PACMAN_URL_PKGS[@]}"
 
 VENV="$WORKSPACE/.venv-windows"
 if [[ ! -d "$VENV" ]]; then

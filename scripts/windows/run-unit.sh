@@ -45,13 +45,22 @@ PACMAN_PKGS=(
   mingw-w64-x86_64-gtk3
   mingw-w64-x86_64-osm-gps-map
   mingw-w64-x86_64-goocanvas
-  mingw-w64-x86_64-gexiv2
   mingw-w64-x86_64-gettext
   intltool
 )
 
+# Pinned-URL packages — exiv2 and gexiv2 were removed from msys2 main
+# repos, so aio/build.sh installs them via `pacman -U` from
+# repo.msys2.org artifacts. Keep these URLs in sync with aio/build.sh
+# when AIO bumps the versions.
+PACMAN_URL_PKGS=(
+  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+)
+
 echo "→ ensuring MSYS2 packages are installed"
 pacman -S --needed --noconfirm "${PACMAN_PKGS[@]}"
+pacman -U --needed --noconfirm "${PACMAN_URL_PKGS[@]}"
 
 # --system-site-packages keeps pip installs in the venv but inherits
 # pacman-provided bindings (gi, cairo, icu, lxml, …). Same shape as the

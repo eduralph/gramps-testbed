@@ -85,9 +85,18 @@ jobs:
             mingw-w64-x86_64-gtk3
             mingw-w64-x86_64-osm-gps-map
             mingw-w64-x86_64-goocanvas
-            mingw-w64-x86_64-gexiv2
             mingw-w64-x86_64-gettext
             intltool
+
+      - name: Install pinned-URL packages (exiv2, gexiv2)
+        # gexiv2 (and its exiv2 dep) was removed from msys2 main repos,
+        # so aio/build.sh installs it via `pacman -U` from a pinned
+        # repo.msys2.org artifact. Keep these URLs/versions in sync
+        # with aio/build.sh — when AIO bumps them, bump here too.
+        run: |
+          pacman -U --needed --noconfirm \
+            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
 
       - name: Set up Python venv (inherits gi/cairo/icu from pacman)
         # Same rationale as the Ubuntu workflow's --system-site-packages
