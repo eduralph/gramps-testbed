@@ -1,0 +1,247 @@
+name: Windows Addon Unit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly drift check at 06:45 UTC — staggered 15min after the
+    # Linux addon-unit cron (06:30) so the two runners do not contend
+    # for the same upstream resources. Surfaces addon-side regressions
+    # that only manifest on Windows (MSYS2 dependency drift,
+    # path-handling assumptions, test_windows_* coverage).
+    - cron: '45 6 * * *'
+  workflow_dispatch:
+    inputs:
+      addons:
+        description: 'Space-separated addon names (empty = all with tests/)'
+        default: ''
+      gramps_repo:
+        description: 'gramps repo (owner/name); empty = same-owner fork'
+        default: ''
+      gramps_ref:
+        description: 'gramps branch/tag/sha'
+        default: 'maintenance/gramps60'
+      addons_source_repo:
+        description: 'addons-source repo (owner/name); empty = same-owner fork'
+        default: ''
+      addons_ref:
+        description: 'addons-source branch/tag/sha'
+        default: 'maintenance/gramps60'
+
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  windows-addon-unit-tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Advisory gate. Same rationale as addon-unit-tests.yml: addon tests
+    # run upstream addon code, so failures usually reflect addon/upstream
+    # bugs rather than testbed issues.
+    continue-on-error: true
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      - name: Checkout gramps fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
+          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps60' }}
+          path: gramps
+
+      - name: Checkout addons-source fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.addons_source_repo || vars.ADDONS_SOURCE_REPO || format('{0}/addons-source', github.repository_owner) }}
+          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
+          path: addons-source
+
+      - name: Set up MSYS2 MINGW64
+        # Kept in sync with windows-unit-tests.yml. Authoritative
+        # reference is ../gramps/aio/build.sh.
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-python-gobject
+            mingw-w64-x86_64-python-cairo
+            mingw-w64-x86_64-python-icu
+            mingw-w64-x86_64-python-lxml
+            mingw-w64-x86_64-python-jsonschema
+            mingw-w64-x86_64-python-pillow
+            mingw-w64-x86_64-gtk3
+            mingw-w64-x86_64-osm-gps-map
+            mingw-w64-x86_64-goocanvas
+            mingw-w64-x86_64-gexiv2
+            mingw-w64-x86_64-gettext
+            intltool
+
+      - name: Set up Python venv (inherits gi/cairo/icu from pacman)
+        run: |
+          /mingw64/bin/python -m venv --system-site-packages .venv
+          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/Scripts" >> "$GITHUB_PATH"
+          .venv/Scripts/python -m pip install --upgrade pip
+
+      - name: Restore pip cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('gramps-testbed/requirements-test.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r gramps-testbed/requirements-test.txt
+          pip install -e 'gramps[testing]'
+
+      - name: Install addon runtime deps (derived from requires_mod)
+        # Auto-derive the union of requires_mod across every .gpr.py in
+        # the checked-out addons-source/. Mirrors the Linux job; failures
+        # are tolerated per-package so a broken transitive build (e.g.
+        # psycopg2 without libpq) does not abort the batch — the
+        # affected addon's tests will skip or fail in isolation.
+        run: |
+          addon_mods=$(python - <<'PY'
+          import ast, glob, re
+          pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
+          mods = set()
+          for f in glob.glob("addons-source/*/*.gpr.py"):
+              try:
+                  text = open(f, encoding="utf-8").read()
+              except OSError:
+                  continue
+              for m in pat.finditer(text):
+                  try:
+                      mods.update(ast.literal_eval(m.group(1)))
+                  except (ValueError, SyntaxError):
+                      pass
+          print(" ".join(sorted(mods)))
+          PY
+          )
+          if [ -n "$addon_mods" ]; then
+            echo "→ addon deps: $addon_mods"
+            for mod in $addon_mods; do
+              pip install "$mod" || \
+                echo "× $mod failed to install (continuing)"
+            done
+          else
+            echo "no requires_mod declarations found"
+          fi
+
+      - name: Compile Gramps translations
+        working-directory: gramps
+        run: |
+          for po in po/*.po; do
+            lang=$(basename "$po" .po)
+            dest="build/mo/$lang/LC_MESSAGES"
+            mkdir -p "$dest"
+            msgfmt "$po" -o "$dest/gramps.mo"
+          done
+
+      - name: Run addon unit tests
+        # Mirrors scripts/windows/run-addon-unit.sh. The filename filter
+        # is inverted from the Linux jobs:
+        #   test_*.py              general — runs here
+        #   test_linux_*.py        Linux-only — skipped
+        #   test_windows_*.py      Windows-only — runs here
+        #   test_integration_*.py  Linux-only — skipped
+        # cygpath -w converts POSIX paths to Windows paths for the
+        # MSYS2-native Python interpreter, which is the form xmlrunner
+        # writes to and GRAMPS_RESOURCES is read as.
+        env:
+          ADDONS: ${{ github.event.inputs.addons }}
+        run: |
+          ws_posix="$(cygpath -u "$GITHUB_WORKSPACE")"
+          results_dir="$ws_posix/gramps-testbed/test-results"
+          mkdir -p "$results_dir"
+
+          gramps_resources_win="$(cygpath -w "$ws_posix/gramps")"
+
+          if [ -n "$ADDONS" ]; then
+            addons=( $ADDONS )
+          else
+            addons=()
+            for d in "$ws_posix"/addons-source/*/tests; do
+              [ -d "$d" ] || continue
+              parent_name=$(basename "$(dirname "$d")")
+              [ "$parent_name" = "addons-source" ] && continue
+              compgen -G "$d/test_*.py" >/dev/null || continue
+              addons+=( "$parent_name" )
+            done
+          fi
+
+          if [ ${#addons[@]} -eq 0 ]; then
+            echo "no addons with tests/test_*.py were found" >&2
+            exit 1
+          fi
+
+          echo "→ addon unit tests: ${addons[*]}"
+
+          fail=0
+          for addon in "${addons[@]}"; do
+            test_dir="$ws_posix/addons-source/$addon/tests"
+            if [ ! -d "$test_dir" ]; then
+              echo "× $addon: addons-source/$addon/tests/ not found" >&2
+              fail=1
+              continue
+            fi
+            echo
+            echo "=== $addon ==="
+            out_dir="$results_dir/$addon"
+            mkdir -p "$out_dir"
+            modules=()
+            for f in "$ws_posix"/addons-source/"$addon"/tests/test_*.py; do
+              [ -f "$f" ] || continue
+              case "$(basename "$f")" in
+                test_linux_*|test_integration_*) continue ;;
+              esac
+              rel="${f#$ws_posix/addons-source/}"
+              mod="${rel%.py}"
+              mod="${mod//\//.}"
+              modules+=( "$mod" )
+            done
+            if [ ${#modules[@]} -eq 0 ]; then
+              echo "× $addon: no Windows-eligible test_*.py in tests/" >&2
+              fail=1
+              continue
+            fi
+            (
+              cd "$ws_posix/addons-source"
+              GRAMPS_RESOURCES="$gramps_resources_win" \
+                python -m xmlrunner "${modules[@]}" \
+                  -o "$(cygpath -w "$out_dir")" \
+                  -v
+            ) || fail=1
+          done
+          exit $fail
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-addon-unit-test-results
+          path: gramps-testbed/test-results/
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          working-directory: gramps-testbed
+          name: Windows Addon Unit Tests
+          path: test-results/**/*.xml
+          reporter: java-junit

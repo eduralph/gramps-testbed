@@ -1,0 +1,160 @@
+name: Windows Unit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly drift check at 05:15 UTC — staggered 15min after the
+    # Linux unit-tests cron (05:00) so the two runners do not contend
+    # for the same upstream resources or notification slots. Surfaces
+    # upstream regressions that only manifest on the Windows side
+    # (MSYS2 packaging shifts, Win-specific gi typelib changes).
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+    inputs:
+      gramps_repo:
+        description: 'gramps repo (owner/name); empty = same-owner fork'
+        default: ''
+      gramps_ref:
+        description: 'gramps branch/tag/sha; empty = matrix defaults'
+        default: ''
+
+# See interface-tests.yml for rationale — dorny/test-reporter needs
+# checks: write + pull-requests: write.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  windows-unit-tests:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Advisory gate. Same rationale as unit-tests.yml: this job runs
+    # gramps' own *_test.py suite against an upstream gramps checkout,
+    # so failures here almost always reflect upstream regressions or
+    # MSYS2 packaging drift, not testbed bugs. continue-on-error lets
+    # testbed PRs merge on upstream-caused red.
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Mirrors the matrix in unit-tests.yml. Keep these in sync when
+        # new maintenance branches are added.
+        gramps_ref:
+          - maintenance/gramps60
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      - name: Checkout gramps fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
+          ref: ${{ github.event.inputs.gramps_ref || matrix.gramps_ref }}
+          path: gramps
+
+      - name: Set up MSYS2 MINGW64
+        # Authoritative reference for the install list is the AIO build
+        # script (../gramps/aio/build.sh). This is the trimmed runtime
+        # subset — enough for gramps.gen to import and the *_test.py
+        # suite to run, but not for the AIO build itself (cx_freeze,
+        # NSIS, dictionary tooling are dropped).
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-python
+            mingw-w64-x86_64-python-pip
+            mingw-w64-x86_64-python-gobject
+            mingw-w64-x86_64-python-cairo
+            mingw-w64-x86_64-python-icu
+            mingw-w64-x86_64-python-lxml
+            mingw-w64-x86_64-python-jsonschema
+            mingw-w64-x86_64-python-pillow
+            mingw-w64-x86_64-gtk3
+            mingw-w64-x86_64-osm-gps-map
+            mingw-w64-x86_64-goocanvas
+            mingw-w64-x86_64-gexiv2
+            mingw-w64-x86_64-gettext
+            intltool
+
+      - name: Set up Python venv (inherits gi/cairo/icu from pacman)
+        # Same rationale as the Ubuntu workflow's --system-site-packages
+        # venv: pacman python-gobject installs into /mingw64's site —
+        # only visible to that interpreter. Inheriting it via venv keeps
+        # `pip install` writes contained while gramps.gen's `import gi`
+        # still resolves at test-collection time.
+        run: |
+          /mingw64/bin/python -m venv --system-site-packages .venv
+          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/Scripts" >> "$GITHUB_PATH"
+          .venv/Scripts/python -m pip install --upgrade pip
+
+      - name: Restore pip cache
+        # actions/cache scopes the key by runner.os automatically
+        # (Linux vs. Windows do not collide on the same key).
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('gramps-testbed/requirements-test.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        run: |
+          pip install -r gramps-testbed/requirements-test.txt
+          # [testing] extras pulls in jsonschema/mock/lxml from gramps
+          # setup.py, which some of gramps' own *_test.py files import.
+          pip install -e 'gramps[testing]'
+
+      - name: Compile Gramps translations
+        working-directory: gramps
+        run: |
+          for po in po/*.po; do
+            lang=$(basename "$po" .po)
+            dest="build/mo/$lang/LC_MESSAGES"
+            mkdir -p "$dest"
+            msgfmt "$po" -o "$dest/gramps.mo"
+          done
+
+      - name: Run unit tests
+        # Mirrors scripts/windows/run-unit.sh. cygpath -w converts the
+        # POSIX results path back to a Windows path so the MSYS2-native
+        # Python interpreter writes to the location the next step (and
+        # actions/upload-artifact) can find.
+        working-directory: gramps
+        env:
+          GRAMPS_RESOURCES: .
+        run: |
+          ws_posix="$(cygpath -u "$GITHUB_WORKSPACE")"
+          mkdir -p "$ws_posix/gramps-testbed/test-results"
+          python -m xmlrunner discover \
+            -p '*_test.py' \
+            -o "$(cygpath -w "$ws_posix/gramps-testbed/test-results")" \
+            -v
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unit-test-results-${{ strategy.job-index }}
+          path: gramps-testbed/test-results/
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          working-directory: gramps-testbed
+          name: Windows Unit Tests (${{ matrix.gramps_ref }})
+          path: test-results/*.xml
+          reporter: java-junit
