@@ -4,7 +4,7 @@
 
 .DESCRIPTION
     Bug 0009356: "Working Installation Crash & New Install Crash due to
-    PYTHONHOME" — https://gramps-project.org/bugs/view.php?id=9356
+    PYTHONHOME" -- https://gramps-project.org/bugs/view.php?id=9356
 
     Original (2016) symptom on Gramps 4.2.x:
         Setting PYTHONHOME=<some other Python install> in the
@@ -14,18 +14,18 @@
         followed by "This application has requested the Runtime to
         terminate it in an unusual way."
 
-    Root cause: the 4.2-era launcher (custom C, gramps.c → gramps.exe)
+    Root cause: the 4.2-era launcher (custom C, gramps.c -> gramps.exe)
     called Py_Initialize() without setting Py_IgnoreEnvironmentFlag,
     so an externally-defined PYTHONHOME pointed CPython at the wrong
     encodings/ tree and startup failed.
 
     Modern AIO architecture (Gramps 6.x) replaces that C launcher
     with cx_Freeze-frozen Python entry points (grampsaiow.py,
-    grampsaioc.py, grampsaiocd.py — see ../gramps/aio/setup.py). The
+    grampsaioc.py, grampsaiocd.py -- see ../gramps/aio/setup.py). The
     cx_Freeze bootloader calls Py_SetPythonHome to the frozen bundle's
     directory before Py_Initialize, which is documented to override
     any external PYTHONHOME. So the 2016 failure mode is expected to
-    be obsolete — but obsolete is a hypothesis until verified.
+    be obsolete -- but obsolete is a hypothesis until verified.
 
     This script verifies that hypothesis on a current Windows AIO
     install. It runs Gramps' console entry point with `--version` (a
@@ -114,7 +114,7 @@ function Invoke-GrampsVersion {
     )
 
     # Run the launcher in a child PowerShell so env overrides are
-    # scoped to this invocation only — the calling shell stays clean.
+    # scoped to this invocation only -- the calling shell stays clean.
     # `cmd /c` captures both stdout and stderr; Start-Process with
     # -RedirectStandard* is more verbose without buying anything here.
     $envPrefix = ''
@@ -145,7 +145,7 @@ if (-not $launcher) {
     throw "Neither grampsc.exe nor gramps.exe found under '$installDir'."
 }
 
-Write-Host "→ Using launcher: $launcher" -ForegroundColor Cyan
+Write-Host "-> Using launcher: $launcher" -ForegroundColor Cyan
 Write-Host ""
 
 # ---- Run 1: baseline (no PYTHONHOME) ----------------------------------
@@ -175,7 +175,7 @@ Write-Host "=== Verdict ===" -ForegroundColor Yellow
 
 # Original 2016 fingerprint: 'Py_Initialize: unable to load the file
 # system codec' + ModuleNotFoundError for 'encodings'. Either string
-# (or any exit-code-0 → exit-code-nonzero divergence) means the bug
+# (or any exit-code-0 -> exit-code-nonzero divergence) means the bug
 # still reproduces.
 $originalFingerprint = @(
     'Py_Initialize: unable to load the file system codec',
@@ -187,7 +187,7 @@ $reproduced = $false
 $reason = ''
 
 if ($baseline.ExitCode -ne 0) {
-    $reason = "Baseline run did not exit cleanly (exit=$($baseline.ExitCode)) — cannot conclude. Investigate the Gramps install before retrying."
+    $reason = "Baseline run did not exit cleanly (exit=$($baseline.ExitCode)) -- cannot conclude. Investigate the Gramps install before retrying."
 }
 elseif ($withPythonhome.ExitCode -ne 0) {
     $reproduced = $true
@@ -207,11 +207,11 @@ else {
 }
 
 if ($reproduced) {
-    Write-Host "REPRODUCED — bug 9356 still occurs." -ForegroundColor Red
+    Write-Host "REPRODUCED -- bug 9356 still occurs." -ForegroundColor Red
     Write-Host $reason
     exit 1
 } else {
-    Write-Host "NOT REPRODUCED — bug 9356 appears obsolete." -ForegroundColor Green
+    Write-Host "NOT REPRODUCED -- bug 9356 appears obsolete." -ForegroundColor Green
     Write-Host $reason
     exit 0
 }
