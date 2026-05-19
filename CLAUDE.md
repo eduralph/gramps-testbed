@@ -161,6 +161,11 @@ mean an issue here — not GitHub. Wiki references:
   - On a maintenance-branch project, set the **"Fixed in version"**
     field to the next release on that branch — this is what drives the
     Change Log page for that release.
+  - If you fix a bug ahead of its **Target Version**, update Target
+    Version to the release you actually shipped it in before resolving
+    — otherwise the [Roadmap](https://gramps-project.org/bugs/roadmap_page.php)
+    display goes wrong. (`X.Y.99` phony releases mean "for X.Y
+    eventually, no milestone yet".)
   - Don't mark "resolved" until the fix is committed to the maintenance
     branch AND forward-merged to master. Both are the developer's
     responsibility, not the triager's.
