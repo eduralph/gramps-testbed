@@ -6,6 +6,7 @@ venv/
 test-results/
 artifacts/
 .run/
+*.log
 .coverage
 .pytest_cache/
 .mypy_cache/
