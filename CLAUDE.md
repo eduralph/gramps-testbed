@@ -140,11 +140,11 @@ mean an issue here — not GitHub. Wiki references:
   GitHub's `#nnnn` convention does not apply inside tracker notes — the
   hash references another Mantis ticket.
 - **Linking a GitHub PR from a MantisBT note:**
-  - gramps core: `p:gramps:nnnn:` is the magic syntax the tracker's
-    GitHub integration consumes. In prose, `gramps Pull Request nnnn`
-    also works.
-  - addons-source / other addon repos: paste the full GitHub URL — no
-    shorthand exists for non-`gramps` repos.
+  - gramps core: `gramps Pull Request nnnn` — the syntax documented
+    under the wiki's [Useful MantisBT bug tracker Syntax codes](https://www.gramps-project.org/wiki/index.php/Using_the_bug_tracker#Useful_MantisBT_bug_tracker_Syntax_codes)
+    section. Applies only to the main `gramps` repository.
+  - addons-source / other addon repos: paste the full GitHub URL —
+    no shorthand exists for non-`gramps` repos.
 - **The PR body must reference the MantisBT issue** using the special
   keywords from upstream's Committing policies, so the tracker
   cross-links automatically. A self-assigned bug whose PR doesn't
