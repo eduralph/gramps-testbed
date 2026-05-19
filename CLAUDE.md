@@ -123,6 +123,54 @@ instruction. This section complements the global engineering rules in
   opening PRs, and marking them ready happen only on Eduard's explicit
   instruction.
 
+## Bug tracker (MantisBT)
+Authoritative bug list for Gramps. When this CLAUDE.md and existing
+memories cite a bug by Mantis ID (e.g. `0013214`, `bug 13395`), they
+mean an issue here — not GitHub. Wiki references:
+[Bug triage](https://gramps-project.org/wiki/index.php/Bug_triage) and
+[Using the bug tracker](https://www.gramps-project.org/wiki/index.php/Using_the_bug_tracker).
+
+- **Tracker:** https://gramps-project.org/bugs. MantisBT "projects" map
+  to release branches:
+  - "Gramps 6.0" project = `maintenance/gramps60` work
+  - "Gramps 5.2" project = older maintenance branch
+  - master-only bugs are filed against the next unreleased version
+    (today 6.1.0; see the MantisBT Roadmap)
+- **`#nnnn` in MantisBT is a MantisBT issue link, NOT a GitHub PR.**
+  GitHub's `#nnnn` convention does not apply inside tracker notes — the
+  hash references another Mantis ticket.
+- **Linking a GitHub PR from a MantisBT note:**
+  - gramps core: `p:gramps:nnnn:` is the magic syntax the tracker's
+    GitHub integration consumes. In prose, `gramps Pull Request nnnn`
+    also works.
+  - addons-source / other addon repos: paste the full GitHub URL — no
+    shorthand exists for non-`gramps` repos.
+- **The PR body must reference the MantisBT issue** using the special
+  keywords from upstream's Committing policies, so the tracker
+  cross-links automatically. A self-assigned bug whose PR doesn't
+  reference it is a triage smell.
+- **Status meanings worth knowing when reading a ticket:**
+  - "acknowledged" — enough info to investigate, not spam
+  - "confirmed" — independently reproduced (for feature requests:
+    judged valid — not a commitment to ship)
+  - "feedback" — waiting on the reporter
+  - "assigned" — someone is actively working it (cleared when they
+    stop)
+- **Resolving a bug (dev side):**
+  - Note the fixing commit SHA in a comment on the ticket.
+  - On a maintenance-branch project, set the **"Fixed in version"**
+    field to the next release on that branch — this is what drives the
+    Change Log page for that release.
+  - Don't mark "resolved" until the fix is committed to the maintenance
+    branch AND forward-merged to master. Both are the developer's
+    responsibility, not the triager's.
+- **Reproduce against `example.gramps` first.** Triage and developers
+  use it as the canonical fixture; "couldn't reproduce" is the most
+  common reason a fix stalls in triage.
+- **One issue per ticket.** Bundled reports are closed upstream with a
+  request to file one ticket per issue (or renamed and split). Mirror
+  this when filing or splitting.
+
 ## Status
 Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
 — the previous "smoke before all else" priority is cleared. Addon-unit suite
