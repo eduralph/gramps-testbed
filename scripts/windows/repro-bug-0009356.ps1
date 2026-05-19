@@ -86,6 +86,8 @@ function Resolve-AioInstallDir {
 
     # Search both Program Files trees; sort by version-suffix descending
     # so the newest install wins when several are present side-by-side.
+    # Two layouts are accepted: older AIOs put the launchers in a `bin`
+    # subdir; 6.0.8+ places them at the install root.
     $candidates = @()
     foreach ($root in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
         if (-not $root) { continue }
@@ -93,7 +95,11 @@ function Resolve-AioInstallDir {
             -Filter 'GrampsAIO*' -ErrorAction SilentlyContinue
         foreach ($m in $matches) {
             $bin = Join-Path $m.FullName 'bin'
-            if (Test-Path -LiteralPath $bin) { $candidates += $bin }
+            if (Test-Path -LiteralPath $bin) {
+                $candidates += $bin
+            } elseif (Find-GrampsLauncher -Dir $m.FullName) {
+                $candidates += $m.FullName
+            }
         }
     }
 
