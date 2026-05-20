@@ -19,6 +19,7 @@ import unittest
 from pathlib import Path
 
 from dogtail.config import config
+from dogtail.rawinput import keyCombo
 from dogtail.tree import root
 from dogtail.utils import screenshot
 
@@ -38,15 +39,37 @@ class GrampsInterfaceTestCase(unittest.TestCase):
     LAUNCH_TIMEOUT_SEC: int = 60
     SCREENSHOT_DIR: Path = Path(os.environ.get("ARTIFACTS_DIR", "artifacts")) / "screenshots"
 
+    # Subclasses may launch Gramps under a specific UI language or with
+    # extra ``-c key:value`` config settings. The defaults preserve the
+    # plain English launch used by every test that does not set them.
+    LAUNCH_ENV: dict[str, str] | None = None
+    LAUNCH_CONFIG: tuple[str, ...] = ()
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
+        # ``-c behavior.use-tips:False`` suppresses the Tip of the Day
+        # frame, which otherwise appears asynchronously a few seconds
+        # after the main window paints and grabs input focus. With it up,
+        # raw X clicks delivered at AT-SPI label coordinates are
+        # intercepted by the tip dialog rather than reaching the
+        # widgets we're trying to drive. The setting also persists in
+        # the gramps config so subsequent launches stay clean.
+        config_args: list[str] = []
+        for setting in ("behavior.use-tips:False", *cls.LAUNCH_CONFIG):
+            config_args += ["-c", setting]
+
+        launch_env = None
+        if cls.LAUNCH_ENV:
+            launch_env = {**os.environ, **cls.LAUNCH_ENV}
+
         cls._proc = subprocess.Popen(
-            ["gramps", "-O", cls.TREE_NAME],
+            ["gramps", *config_args, "-O", cls.TREE_NAME],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=launch_env,
         )
 
         deadline = time.monotonic() + cls.LAUNCH_TIMEOUT_SEC
@@ -114,12 +137,24 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         for modal in app.findChildren(
             lambda n: n.roleName in ("dialog", "alert")
         ):
+            clicked = False
             for btn in modal.findChildren(
                 lambda n: n.roleName == "push button"
                 and n.name in ("Close", "OK", "Cancel")
             ):
                 try:
                     btn.click()
+                    clicked = True
+                except Exception:
+                    pass
+            # Button names are localized (e.g. Finnish "Sulje"), so a
+            # named-button match can miss when Gramps runs in another
+            # language. Escape dismisses a standard GtkMessageDialog
+            # regardless of UI language.
+            if not clicked:
+                try:
+                    if modal.showing:
+                        keyCombo("Escape")
                 except Exception:
                     pass
 
