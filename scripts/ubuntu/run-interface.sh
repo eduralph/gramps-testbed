@@ -73,6 +73,8 @@ docker run --rm \
     gramps -C TestTree -i /workspace/gramps/example/gramps/example.gramps
     gramps -C QuiltViewTree \
            -i /workspace/gramps-testbed/tests/interface/data/quiltview_minimal.gramps
+    gramps -C Bug14100Tree \
+           -i /workspace/gramps-testbed/tests/interface/data/bug_0014100_minimal.gramps
     # Clear stale XMLs so accumulated runs do not pollute JUnit summaries.
     rm -rf /workspace/gramps-testbed/test-results
     mkdir -p /workspace/gramps-testbed/test-results

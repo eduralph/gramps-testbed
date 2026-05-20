@@ -171,6 +171,8 @@ jobs:
           gramps -C TestTree -i gramps/example/gramps/example.gramps
           gramps -C QuiltViewTree \
                  -i gramps-testbed/tests/interface/data/quiltview_minimal.gramps
+          gramps -C Bug14100Tree \
+                 -i gramps-testbed/tests/interface/data/bug_0014100_minimal.gramps
 
       - name: Run interface tests
         working-directory: gramps-testbed
