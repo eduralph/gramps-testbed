@@ -60,8 +60,8 @@ instruction. This section complements the global engineering rules in
 
 - **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
   the current production branch — the latest `maintenance/gramps*`
-  (today `maintenance/gramps60`, the default working branch for both
-  forks), not `master`. Per jralls on gramps-project/gramps#2298:
+  (today `maintenance/gramps61`), not `master`. Per jralls on
+  gramps-project/gramps#2298:
   `master` is for new features and doesn't reach users until the next
   major release, so anything users should get sooner — fixes and
   cleanups alike — goes on the maintenance branch and is forward-merged
@@ -89,7 +89,7 @@ instruction. This section complements the global engineering rules in
   it matters). Recollection is a hypothesis, not a verification.
 - **Check upstream isn't already ahead.** Before calling a bug unfixed,
   grep recent upstream commits and open PRs for the same symptom — a
-  fix may have landed on `master` but not yet on `maintenance/gramps60`.
+  fix may have landed on `master` but not yet on `maintenance/gramps61`.
 - **One logical fix per PR.** The lint/compile backlog is deliberately
   one PR per addon per issue; keep it that way. Bundling hides mistakes.
 - **Ship the means to verify.** Prefer a regression test in the same PR
