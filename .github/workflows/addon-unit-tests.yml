@@ -247,6 +247,22 @@ jobs:
           done
           exit $fail
 
+      - name: Validate addon translation catalogs
+        # Every addons-source/<addon>/po/*.po must compile with msgfmt —
+        # the same step `make.py build` runs. A rejected catalog aborts
+        # the addon build (Mantis bug 14234), and addons-source has no
+        # unit-test CI of its own, so this testbed check is the only
+        # automated guard. `if: always()` runs it even when the addon
+        # suites above fail, so a catalog regression is never masked.
+        if: always()
+        working-directory: gramps-testbed
+        env:
+          ADDONS_SOURCE: ${{ github.workspace }}/addons-source
+        run: |
+          mkdir -p test-results/_po-catalogs
+          python -m xmlrunner tests.test_addon_po_catalogs \
+            -o test-results/_po-catalogs -v
+
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4

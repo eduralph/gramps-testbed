@@ -4,6 +4,11 @@
 # No display, no dbus, no AT-SPI — these tests construct in-memory fixtures
 # and/or exercise pure-logic helpers from the addon.
 #
+# After the per-addon suites, a translation-catalog gate runs msgfmt over
+# every addons-source/<addon>/po/*.po — the step `make.py build` itself
+# performs — so a catalog regression that would abort an addon build is
+# caught here too.
+#
 # Companion to scripts/ubuntu/run-unit.sh (gramps core unit suite) and
 # scripts/ubuntu/run-interface.sh (GUI tests via dogtail).
 #
@@ -235,6 +240,29 @@ PY
         summary_lines+=( "$(printf "  %-30s  FAIL  (%s tests, %s)" "$addon" "$ran" "$detail")" )
       fi
     done
+
+    # Translation-catalog gate: every addons-source/<addon>/po/*.po must
+    # compile with msgfmt — the same step `make.py build` runs. A rejected
+    # catalog aborts the addon build (Mantis bug 14234), and addons-source
+    # has no unit-test CI of its own, so this testbed check is the only
+    # automated guard. PIPESTATUS (not pipefail) keeps the tee from
+    # masking the real xmlrunner exit code, as in the loop above.
+    echo
+    echo "=== addon translation catalogs ==="
+    cat_out="$results_dir/_po-catalogs"
+    mkdir -p "$cat_out"
+    cat_log="$cat_out/_run.log"
+    (
+      cd /workspace/gramps-testbed
+      ADDONS_SOURCE=/workspace/addons-source \
+        python3 -m xmlrunner tests.test_addon_po_catalogs -o "$cat_out" -v
+    ) 2>&1 | tee "$cat_log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      summary_lines+=( "$(printf "  %-30s  PASS" "po-catalogs")" )
+    else
+      fail=1
+      summary_lines+=( "$(printf "  %-30s  FAIL  (see _po-catalogs/_run.log)" "po-catalogs")" )
+    fi
 
     echo
     echo "=== Summary ==="
