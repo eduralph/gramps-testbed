@@ -111,11 +111,19 @@ instruction. This section complements the global engineering rules in
   <what the diff does>
 
   ## Verified against
-  - gramps-project/<repo>@<sha>:<path>:<lines>
+  - <path>:<lines> — <what was checked there>
 
   ## Test
   <link to the test, or rationale for why none applies + manual repro>
   ```
+
+  In **Verified against**, cite `path:lines` plainly against the branch the
+  PR targets — no SHA; the reviewer is already on that branch. Pin a revision
+  only for a cross-branch or historical reference, stated once and labelled
+  (e.g. "line numbers as of `maintenance/gramps61` @ `<sha>`"). A commit that
+  *caused* the bug — introduced it, or is the change being corrected — gets
+  its own explicitly-labelled line; never bake a bare `@<sha>` into a
+  citation, which a reviewer reads as a bug-related commit (see gramps#2316).
 
 - **Eduard's review gate (not Claude's to perform).** Eduard opens fork
   PRs as draft and re-reads with fresh eyes before marking ready — solo
