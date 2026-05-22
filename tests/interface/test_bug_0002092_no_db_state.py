@@ -66,6 +66,13 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
     """One-shot diagnostic: walk kulath's list, close the tree, walk again."""
 
     TREE_NAME = "TestTree"
+    # Same window-size override as the #8594 test — gramps defaults to
+    # 775×500, which under Xvfb (no window manager) leaves bottombar
+    # gramplets clipped. 1800×1000 gives every gramplet space to paint.
+    LAUNCH_CONFIG = (
+        "interface.main-window-width:1800",
+        "interface.main-window-height:1000",
+    )
 
     # ------------------------------------------------------------------
     # Capture helpers — one per gramplet class. Each takes the category
@@ -93,12 +100,38 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
             time.sleep(0.3)
         return False
 
+    # Phase label set by the test method ("before"/"after"); used to
+    # name screenshots so baseline and post-close grabs of the same
+    # category land in different files.
+    _phase: str = "before"
+
+    def _screenshot_category(self, category: str) -> None:
+        """X-screen screenshot of the current view, saved to
+        artifacts/screenshots/2092-<phase>-<category>.png. Best effort
+        — never blocks the test if Gdk pixbuf save fails."""
+        try:
+            import gi
+            gi.require_version("Gdk", "3.0")
+            from gi.repository import Gdk
+            import os
+            outdir = "/workspace/gramps-testbed/artifacts/screenshots"
+            os.makedirs(outdir, exist_ok=True)
+            root = Gdk.get_default_root_window()
+            w, h = root.get_width(), root.get_height()
+            pb = Gdk.pixbuf_get_from_window(root, 0, 0, w, h)
+            safe_cat = category.replace(" ", "-").replace("/", "_")
+            path = f"{outdir}/2092-{self._phase}-{safe_cat}.png"
+            pb.savev(path, "png", [], [])
+        except Exception as exc:
+            print(f"  screenshot for {category!r} failed: {exc!r}")
+
     def _capture_text_gramplet(self, category: str) -> str | None:
         """Generic capture for TextView-based gramplets (Top Surnames,
         Statistics, Given Name Cloud). Returns the text content or a
         short marker."""
         if not self._navigate_to_category(category):
             return f"NAV_FAILED:{category}"
+        self._screenshot_category(category)
         # Look for a text widget showing non-trivial content. This is
         # intentionally broad — multiple gramplets on the same page will
         # each match; the per-gramplet refinement is a follow-up.
@@ -116,6 +149,7 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
     def _capture_details_gramplet(self, category: str) -> str | None:
         if not self._navigate_to_category(category):
             return f"NAV_FAILED:{category}"
+        self._screenshot_category(category)
         # Person/Place/Repository Details and Children all show a
         # composite label + grid; the exact AT-SPI shape depends on
         # whether the bottombar has the gramplet docked. Mark as
@@ -125,6 +159,7 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
     def _capture_tree_gramplet(self, category: str) -> str | None:
         if not self._navigate_to_category(category):
             return f"NAV_FAILED:{category}"
+        self._screenshot_category(category)
         # Children gramplet is a GtkTreeView; capture row count.
         for tv in self.app.findChildren(
             lambda n: n.roleName == "tree table" and n.showing
@@ -146,6 +181,7 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
     def _capture_media_preview(self, category: str) -> str | None:
         if not self._navigate_to_category(category):
             return f"NAV_FAILED:{category}"
+        self._screenshot_category(category)
         # Media Preview shows a Gtk.Image; AT-SPI surfaces it as an
         # "image" role with a description. Pre/post comparison of the
         # image description is enough for diagnostic purposes.
@@ -172,9 +208,12 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
     def _close_tree(self) -> bool:
         """Find Family Trees menu → Close, invoke it, return True on
         success."""
-        # Surface the Family Trees menu in the menu bar.
+        # Surface the Family Trees menu in the menu bar. AT-SPI strips
+        # the leading underscore accel marker so the actual name is
+        # "Family Trees", not "_Family Trees" — accept both for safety.
         for menu in self.app.findChildren(
-            lambda n: n.roleName == "menu" and (n.name or "") == "_Family Trees"
+            lambda n: n.roleName == "menu"
+            and (n.name or "") in ("Family Trees", "_Family Trees")
         ):
             try:
                 menu.click()
@@ -202,6 +241,7 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
         """Walk each kulath component, close the tree, walk again. Emit
         the comparison as test output for the protocol file."""
         baseline: dict[str, str | None] = {}
+        type(self)._phase = "before"
         for name, category, helper_name in KULATH_COMPONENTS:
             helper: Callable[[str], str | None] = getattr(self, helper_name)
             baseline[name] = helper(category)
@@ -215,6 +255,7 @@ class Bug2092NoDbStateDiagnostic(GrampsInterfaceTestCase):
             )
 
         post: dict[str, str | None] = {}
+        type(self)._phase = "after"
         for name, category, helper_name in KULATH_COMPONENTS:
             helper = getattr(self, helper_name)
             post[name] = helper(category)
