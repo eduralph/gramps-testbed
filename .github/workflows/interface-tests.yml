@@ -155,7 +155,7 @@ jobs:
         run: |
           USER_PLUGINS="$(python -c 'from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)')"
           mkdir -p "$USER_PLUGINS"
-          for addon in QuiltView; do
+          for addon in QuiltView CombinedView; do
             src="addons-source/$addon"
             if [ -d "$src" ]; then
               rm -rf "$USER_PLUGINS/$addon"

@@ -59,7 +59,7 @@ docker run --rm \
     # tight as the tests require; every entry adds startup cost.
     USER_PLUGINS="$(python3 -c "from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)")"
     mkdir -p "$USER_PLUGINS"
-    for addon in QuiltView; do
+    for addon in QuiltView CombinedView; do
       src="/workspace/addons-source/$addon"
       if [ -d "$src" ]; then
         rm -rf "$USER_PLUGINS/$addon"
