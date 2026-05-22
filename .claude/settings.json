@@ -76,9 +76,6 @@
       "Write(.env.*)"
     ],
     "ask": [
-      "Bash(git push:*)",
-      "Bash(git push --force*)",
-      "Bash(rm:*)",
       "Bash(gh pr merge:*)",
       "Bash(gh release:*)"
     ]
