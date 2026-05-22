@@ -7,7 +7,7 @@ on:
   schedule:
     # Nightly drift check at 05:00 UTC — 1h after upstream-sync.yml rebases
     # the forks at 04:00 UTC, so this run exercises whatever landed on
-    # maintenance/gramps60 overnight. Surfaces upstream regressions in a
+    # maintenance/gramps61 overnight. Surfaces upstream regressions in a
     # scheduled failure instead of the next contributor's PR.
     - cron: '0 5 * * *'
   workflow_dispatch:
@@ -43,10 +43,10 @@ jobs:
       fail-fast: false
       matrix:
         # Supported Gramps minors. Add new maintenance branches here when
-        # they exist upstream (e.g. - maintenance/gramps61) — each entry
+        # they exist upstream (e.g. - maintenance/gramps60) — each entry
         # produces a parallel job.
         gramps_ref:
-          - maintenance/gramps60
+          - maintenance/gramps61
 
     steps:
       - name: Checkout testbed
