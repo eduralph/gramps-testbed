@@ -4,8 +4,8 @@ CI/CD harness for GUI-testing Gramps and its addons via AT-SPI/dogtail.
 
 ## Workspace layout
 Expects three sibling directories:
-- `../gramps` — fork of gramps-project/gramps (branch: maintenance/gramps60)
-- `../addons-source` — fork of gramps-project/addons-source (branch: maintenance/gramps60)
+- `../gramps` — fork of gramps-project/gramps (branch: maintenance/gramps61)
+- `../addons-source` — fork of gramps-project/addons-source (branch: maintenance/gramps61)
 - `../addons` — upstream gramps-project/addons, used as make.py output target
 
 ## Upstream agent guidance
@@ -46,7 +46,7 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   runner would do the inverse. Until a Windows image/runner exists in the
   testbed, `test_windows_*.py` runs nowhere here — Windows coverage lives
   in addons-source's own Windows CI job.
-- Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.0.8),
+- Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.1.0),
   built from docker/Dockerfile.ubuntu; version is auto-read from gramps/version.py
   by the wrapper scripts so different Gramps versions get different tags
 - Do not edit files in ../gramps or ../addons-source without explicit instruction
@@ -99,7 +99,7 @@ instruction. This section complements the global engineering rules in
   the PR body with a short rationale or manual repro.
 - **Edit the source, never the live plugin dir.** Addon changes go in
   `../addons-source/`. The auto-sync runs source → installed plugin
-  (`~/.local/share/gramps/gramps60/plugins/…`) one way only; edits made
+  (`~/.local/share/gramps/gramps61/plugins/…`) one way only; edits made
   directly in the plugin dir are silently lost on the next source save.
 - **PR description format:**
 
