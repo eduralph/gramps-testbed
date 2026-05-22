@@ -51,7 +51,7 @@ detect_fork_owner() {
 }
 
 FORK_OWNER="${FORK_OWNER:-$(detect_fork_owner)}"
-BRANCH="${BRANCH:-maintenance/gramps60}"
+BRANCH="${BRANCH:-maintenance/gramps61}"
 UPSTREAM_OWNER="gramps-project"
 
 if (( USE_SSH )); then
