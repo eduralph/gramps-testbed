@@ -28,8 +28,11 @@ Run `./scripts/bootstrap-forks.sh` to produce that layout.
 
 - **Interface tests are written as `unittest.TestCase` subclasses** so they
   can be contributed upstream without rewriting.
-- **Forks stay pure mirrors of upstream.** All CI machinery lives here,
-  so `git pull upstream <branch>` in the forks is always a fast-forward.
+- **CI machinery lives in this repo, not in the forks.** Where the
+  forks must carry CI cherry-picks upstream hasn't adopted, the nightly
+  `upstream-sync.yml` workflow reconciles them with a merge PR rather
+  than fast-forwarding — the fork maintenance branches are
+  PR-protected and direct push is rejected.
 - **The `gramps` unit suite runs upstream-style** (`python -m unittest
   discover -p '*_test.py'`, matching gramps' own `regrtest.py`
   conventions). Interface tests use the same discovery mechanism under
@@ -39,10 +42,11 @@ Run `./scripts/bootstrap-forks.sh` to produce that layout.
 
 | Workflow | Purpose | Triggers |
 | --- | --- | --- |
-| `unit-tests.yml` | Run gramps' own `*_test.py` unit suite | push, PR, manual |
-| `interface-tests.yml` | Run dogtail interface tests against gramps | push, PR, manual (with parameterised refs) |
-| `addon-unit-tests.yml` | Run per-addon `tests/test_*.py` suites | manual only |
-| `upstream-sync.yml` | Nightly rebase of forks onto upstream | cron, manual |
+| `unit-tests.yml` | Run gramps' own `*_test.py` unit suite | push, PR, cron, manual |
+| `interface-tests.yml` | Run dogtail interface tests against gramps | push, PR, cron, manual (with parameterised refs) |
+| `addon-unit-tests.yml` | Run per-addon `tests/test_*.py` suites | push, PR, cron, manual |
+| `docker-build.yml` | Build the Ubuntu Docker test image | push (Dockerfile paths), PR (Dockerfile paths), cron, manual |
+| `upstream-sync.yml` | Open fork-sync PRs from upstream | cron, manual |
 
 All three test workflows accept `workflow_dispatch` inputs to override
 which repos/refs to pull — useful for isolating a regression against a
@@ -65,7 +69,7 @@ BRANCH=feature/xyz ./scripts/bootstrap-forks.sh         # non-default branch
 ./scripts/bootstrap-forks.sh --ssh                      # SSH remotes
 ```
 
-**CI (`.github/workflows/interface-tests.yml`, `unit-tests.yml`):**
+**CI (`.github/workflows/interface-tests.yml`, `unit-tests.yml`, `addon-unit-tests.yml`):**
 
 Resolved in this order: `workflow_dispatch` input → repository variable
 → same-owner default.
@@ -110,9 +114,22 @@ the image.
 
 ## Current state
 
-- `test_smoke.py` — launches Gramps, opens the seeded example tree,
-  asserts the People view is populated. Must pass before any other test
-  is meaningful.
+- **Smoke** (`tests/interface/test_smoke.py`) launches Gramps, opens
+  the seeded example tree, and asserts the People view is populated.
+- **Per-bug interface regression tests** under `tests/interface/`
+  each reproduce a specific upstream issue (CombinedView stale-view
+  crash, QuiltView Surname import, the Finnish about-date inflection
+  KeyError, …) and go green once the upstream fix lands and syncs to
+  the fork branches CI checks out. That "fails until the fix lands"
+  pattern is the testbed's main purpose — interface tests stay
+  non-blocking so the red is informative without gating merges.
+- **Addon `.po` catalog gate** (`tests/test_addon_po_catalogs.py`)
+  runs `msgfmt` over every addon's translations the same way
+  `make.py build` does, catching `.po` regressions before they reach
+  users.
+
+See CLAUDE.md "CI gates and branch protection" for which workflows
+block merges (none of the test workflows do; all advisory).
 
 ## Known constraints
 
