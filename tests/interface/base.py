@@ -45,6 +45,22 @@ class GrampsInterfaceTestCase(unittest.TestCase):
     LAUNCH_ENV: dict[str, str] | None = None
     LAUNCH_CONFIG: tuple[str, ...] = ()
 
+    # When True (default), setUpClass insists that ``gramps -O TREE_NAME``
+    # actually opens the tree -- it loops until a frame titled with
+    # TREE_NAME appears, and a timeout is a class-level ERROR. Set False
+    # in a subclass whose test exercises a bug that crashes the tree-open
+    # path itself (e.g. bug 14100, where a Finnish about-date raises
+    # KeyError during render at tree-open and the launch lands on "No
+    # Family Tree loaded" instead). In that mode setUpClass records
+    # ``cls.tree_opened = False`` and returns, so the test method can
+    # fail cleanly with a clear bug-pointer message.
+    TREE_REQUIRED: bool = True
+
+    # Set by setUpClass: whether ``gramps -O TREE_NAME`` actually opened
+    # the tree. Always True under the default required-tree launch; only
+    # ever False under ``TREE_REQUIRED = False``.
+    tree_opened: bool = True
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
@@ -74,6 +90,7 @@ class GrampsInterfaceTestCase(unittest.TestCase):
 
         deadline = time.monotonic() + cls.LAUNCH_TIMEOUT_SEC
         last_err: Exception | None = None
+        app = None
         while time.monotonic() < deadline:
             try:
                 app = root.application("gramps")
@@ -83,10 +100,23 @@ class GrampsInterfaceTestCase(unittest.TestCase):
                     and cls.TREE_NAME in (n.name or "")
                 ):
                     cls.app = app
+                    cls.tree_opened = True
                     return
             except Exception as exc:
                 last_err = exc
             time.sleep(1)
+
+        # Timeout. Either gramps never reached AT-SPI (app is None), or
+        # gramps came up but never opened a frame titled TREE_NAME --
+        # i.e. ``gramps -O TREE_NAME`` failed to open the tree (e.g. it
+        # crashed while rendering the tree's content on the way in).
+        # Tests opt in to the second case by setting TREE_REQUIRED = False,
+        # which lets setUpClass return so the test method can assert
+        # about the failed tree-open instead of dying here.
+        if app is not None and not cls.TREE_REQUIRED:
+            cls.app = app
+            cls.tree_opened = False
+            return
 
         cls._capture_screenshot("launch-failure")
         cls._dump_tree_on_timeout()

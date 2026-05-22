@@ -38,6 +38,15 @@ paints.
 The test *skips* (rather than false-passing) if Gramps did not actually
 come up in Finnish -- in English the inflection key is valid and the bug
 cannot occur.
+
+On a pre-fix Gramps the bug actually fires earlier than the navigate-to-
+relview step originally targeted: rendering the about-1652 person on the
+tree-open path itself raises, so ``gramps -O Bug14100Tree`` lands on the
+"Ei sukupuuta ladattuna" / "No Family Tree loaded" main window and the
+test cannot navigate at all. The class opts out of the required-tree
+launch (``TREE_REQUIRED = False`` in ``GrampsInterfaceTestCase``) and
+reports that case as a clean test failure naming the upstream fix
+(gramps-project/gramps#2322) instead of letting setUpClass time out.
 """
 
 from __future__ import annotations
@@ -69,6 +78,14 @@ class Bug14100RelviewInflectionKeyErrorTest(GrampsInterfaceTestCase):
     # Date format index 2 == "Päivä Kuukausi Vuosi" (long month name);
     # the default ISO format never reaches the inflection code path.
     LAUNCH_CONFIG = ("preferences.date-format:2",)
+    # Pre-fix Gramps crashes during ``gramps -O Bug14100Tree`` itself --
+    # rendering the home person's "about January 1652" birth on the
+    # tree-open path raises ``KeyError: 'noin'`` from
+    # ``DateDisplay.format_long_month_year``, and the launch lands on
+    # "No Family Tree loaded" instead. Opt out of the required-tree
+    # launch so ``base.setUpClass`` returns with ``tree_opened = False``
+    # and the test method can fail cleanly with a pointer to PR 2322.
+    TREE_REQUIRED = False
 
     def _find_category_toggle(self, name: str, timeout: float = 10.0):
         """Return a showing sidebar ``toggle button`` with the given name,
@@ -103,6 +120,28 @@ class Bug14100RelviewInflectionKeyErrorTest(GrampsInterfaceTestCase):
         return False
 
     def test_relationship_view_renders_about_date_without_crash(self) -> None:
+        # Pre-fix Gramps crashes inside ``gramps -O Bug14100Tree`` itself
+        # (rendering the "about January 1652" home person at tree-open
+        # raises KeyError: 'noin' from format_long_month_year), so the
+        # launch lands on "Ei sukupuuta ladattuna" / "No Family Tree
+        # loaded" and never opens the tree. base.setUpClass tolerates
+        # this when TREE_REQUIRED = False, records cls.tree_opened and
+        # returns -- report the bug cleanly here with a pointer to the
+        # upstream fix instead of letting setUpClass time out.
+        if not self.tree_opened:
+            self._capture_screenshot("bug-14100-tree-did-not-open")
+            self.fail(
+                "Mantis bug 14100 reproduced: gramps could not open "
+                f"{self.TREE_NAME!r} -- the launch finished at the "
+                '"No Family Tree loaded" main window. With LANGUAGE=fi + '
+                "preferences.date-format=2, rendering the home person's "
+                '"about January 1652" birth raises KeyError: \'noin\' from '
+                "DateDisplay.format_long_month_year, which kills the "
+                "tree-open path. Fixed upstream by gramps-project/gramps"
+                '#2322 (the .get(inflect, FORMATS[""]) fallback in '
+                "_datedisplay.py)."
+            )
+
         # The category is "Suhteet" only if the fi locale loaded. In
         # English the inflection key is valid and the bug cannot occur,
         # so a non-Finnish run must skip rather than pass vacuously.
