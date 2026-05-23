@@ -230,12 +230,21 @@ def main():
     ap.add_argument("--ids", required=True, help="comma-separated issue IDs")
     ap.add_argument("--batch", required=True, help="batch folder name, e.g. batch-01-graphview")
     ap.add_argument("--batches-dir", default="batches")
+    ap.add_argument("--clobber", action="store_true",
+                    help="Overwrite existing issue_<id>.md briefs. Default is to SKIP "
+                         "issues whose brief already exists, so re-running to add IDs "
+                         "never destroys a filled-in TRIAGE VERDICT.")
     args = ap.parse_args()
 
-    import pandas as pd
-    df = pd.read_csv(args.csv, dtype=str).fillna("")
-    df.columns = [c.strip() for c in df.columns]
-    df["nid"] = df["Id"].apply(norm)
+    # stdlib csv (no pandas) — keeps the triage scripts dependency-free,
+    # matching the testbed's stdlib-only discipline. Index rows by normalized id.
+    import csv
+    by_id = {}
+    with open(args.csv, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        for raw_row in reader:
+            row = {(k.strip() if k else k): (v or "") for k, v in raw_row.items()}
+            by_id[norm(row.get("Id", ""))] = row
 
     ids = [norm(x) for x in args.ids.split(",") if x.strip()]
     notes_dir = Path(args.notes_dir)
@@ -244,14 +253,25 @@ def main():
 
     index_rows = []
     for iid in ids:
-        match = df[df["nid"] == iid]
-        if match.empty:
+        row = by_id.get(iid)
+        if row is None:
             print(f"#{iid}: not in CSV, skipping")
             continue
-        row = match.iloc[0].to_dict()
+        brief_path = batch_dir / f"issue_{iid}.md"
+        if brief_path.exists() and not args.clobber:
+            print(f"#{iid}: brief exists, SKIPPING (use --clobber to overwrite). "
+                  f"Verdict preserved.")
+            (batch_dir / "results" / f"issue_{iid}").mkdir(parents=True, exist_ok=True)
+            # still include it in the index
+            rec = load_notes(notes_dir, iid)
+            notes = clean_note_blocks(rec) if rec else []
+            flags = auto_flags(row, notes)
+            index_rows.append((iid, row.get("Summary", "")[:55], len(notes),
+                               "; ".join(f.split(":")[0] for f in flags)))
+            continue
         rec = load_notes(notes_dir, iid)
         notes = clean_note_blocks(rec) if rec else []
-        (batch_dir / f"issue_{iid}.md").write_text(issue_brief(row, notes), encoding="utf-8")
+        brief_path.write_text(issue_brief(row, notes), encoding="utf-8")
         (batch_dir / "results" / f"issue_{iid}").mkdir(parents=True, exist_ok=True)
         flags = auto_flags(row, notes)
         index_rows.append((iid, row.get("Summary", "")[:55], len(notes),
