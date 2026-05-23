@@ -37,6 +37,10 @@ Run `./scripts/bootstrap-forks.sh` to produce that layout.
   discover -p '*_test.py'`, matching gramps' own `regrtest.py`
   conventions). Interface tests use the same discovery mechanism under
   `xmlrunner` so GitHub Actions can render JUnit XML reports.
+- **Triage feeds the tests, not the other way round.** Bug selection is
+  scripted and reviewable (see [Triage pipeline](#triage-pipeline)); the
+  intent is that every fix that lands carries a regression test back into
+  this harness, so the backlog shrinks without re-growing.
 
 ## Workflows
 
@@ -53,6 +57,53 @@ which repos/refs to pull — useful for isolating a regression against a
 specific branch or commit. `addon-unit-tests.yml` additionally accepts
 a space-separated `addons` input; empty means "every addon with
 `tests/test_*.py`".
+
+## Triage pipeline
+
+`triage/` turns the Gramps [MantisBT bug tracker](https://gramps-project.org/bugs)
+into reviewable, fix-ready work items. It exists because the highest-value
+input to the test suite is *the right bug to fix next*, and that decision
+benefits from the tracker's full comment history — which the bulk CSV export
+omits and the web UI gates behind Cloudflare.
+
+The cycle, scripted where it's mechanical and manual where it's judgment:
+
+1. **Export** (manual, periodic): a logged-in Mantis CSV export — with the
+   `description`, `steps_to_reproduce`, and `additional_information` columns
+   enabled under *My Account → Manage Columns* — lands dated in `triage/data/`.
+   The export cannot include comment threads; step 2 handles those.
+2. **Scrape notes** (`triage/scripts/mantis_notes.py`): pulls each issue's
+   comment thread by driving a real browser that has already cleared
+   Cloudflare, writing `triage/notes/issue_<id>.json`. (This rides your own
+   browser session; it does not bypass the challenge.)
+3. **Generate briefs** (`triage/scripts/make_handoff.py`): merges the CSV
+   fields and scraped notes into one Markdown brief per issue under
+   `triage/batches/<batch>/`, each carrying an empty triage verdict and an
+   auto-flag pass (external-repo / upstream / core-traceback / already-fixed).
+   `run-batch.sh` chains steps 2–3.
+4. **Triage** (manual judgment): each brief's verdict records whether the
+   issue is actionable, which repo the fix targets (addon vs gramps core vs
+   an external repo — different PR destinations), whether the reporter's
+   workaround masks the real defect, and where the regression test goes.
+   This is the step that catches mislabelled bugs before any code is written.
+5. **Fix** ([Claude Code](https://docs.claude.com/en/docs/claude-code),
+   or by hand): a brief is handed to Claude Code, which works the issue per
+   its verdict — reproduce against `example.gramps` first, write the failing
+   test, fix until green, and emit a result (summary + patch + PR description)
+   under the batch's `results/`. The verdict's conventions (branch target,
+   "edit source not the plugin dir", the PR format) are enforced via the
+   testbed's `CLAUDE.md`. Fixes are committed only after human review;
+   nothing is pushed or PR'd automatically.
+
+The dependency-light scripts (`mantis_notes.py` needs a browser driver;
+`make_handoff.py` is pure stdlib) and the full per-step workflow — including
+the Cloudflare attach-mode setup, the Claude Code handoff conventions, and
+the per-issue verdict format — are documented in
+[`triage/README.md`](triage/README.md).
+
+`triage/data/` and `triage/notes/` are gitignored: they are regenerable
+exports of third-party tracker content. The verdicts and scripts are tracked,
+since the verdict is the curated judgment the pipeline produces.
 
 ## Configuration
 
@@ -112,6 +163,10 @@ the image.
 3. Use `self.app` (the dogtail `Application` root) to find widgets.
 4. Screenshots on failure land in `artifacts/screenshots/` automatically.
 
+For a bug-specific regression test, name it `test_bug_<id>_<slug>.py` and
+cite the Mantis issue in the module docstring — the convention the triage
+pipeline's verdicts point fixes at.
+
 ## Current state
 
 - **Smoke** (`tests/interface/test_smoke.py`) launches Gramps, opens
@@ -127,6 +182,9 @@ the image.
   runs `msgfmt` over every addon's translations the same way
   `make.py build` does, catching `.po` regressions before they reach
   users.
+- **Triage pipeline** (`triage/`) selects and prepares tracker bugs for
+  fixing, with each fix expected to return a regression test to one of
+  the suites above. See [Triage pipeline](#triage-pipeline).
 
 See CLAUDE.md "CI gates and branch protection" for which workflows
 block merges (none of the test workflows do; all advisory).
