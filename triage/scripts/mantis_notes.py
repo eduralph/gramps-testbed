@@ -59,12 +59,17 @@ def norm_id(raw: str) -> str:
 def load_ids(args) -> list[str]:
     if args.ids:
         return [norm_id(x) for x in args.ids.split(",") if x.strip()]
-    import pandas as pd
-    df = pd.read_csv(args.csv, dtype=str).fillna("")
-    df.columns = [c.strip() for c in df.columns]
-    if args.category and not args.all:
-        df = df[df["Category"] == args.category]
-    return [norm_id(x) for x in df["Id"].tolist()]
+    # stdlib csv (no pandas) — keeps the scraper dependency-light (playwright only).
+    import csv
+    ids = []
+    with open(args.csv, newline="", encoding="utf-8-sig") as fh:
+        reader = csv.DictReader(fh)
+        for raw in reader:
+            row = {(k.strip() if k else k): (v or "") for k, v in raw.items()}
+            if args.category and not args.all and row.get("Category") != args.category:
+                continue
+            ids.append(norm_id(row.get("Id", "")))
+    return ids
 
 
 def extract_issue(page, issue_id: str) -> dict:
