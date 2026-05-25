@@ -36,6 +36,7 @@ permissions:
 
 jobs:
   windows-addon-unit-tests:
+    name: '[upstream] Windows Addon Unit Tests'
     runs-on: windows-latest
     timeout-minutes: 30
     # Advisory gate. Same rationale as addon-unit-tests.yml: addon tests

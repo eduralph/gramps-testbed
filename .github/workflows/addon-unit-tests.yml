@@ -39,6 +39,7 @@ permissions:
 
 jobs:
   addon-unit-tests:
+    name: '[upstream] Addon Unit Tests'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Advisory gate. Addon tests run upstream addon code, so failures

@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   windows-unit-tests:
+    name: '[upstream] Windows Unit Tests (${{ matrix.gramps_ref }})'
     runs-on: windows-latest
     timeout-minutes: 30
     # Advisory gate. Same rationale as unit-tests.yml: this job runs

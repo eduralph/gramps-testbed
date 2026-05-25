@@ -39,6 +39,7 @@ permissions:
 
 jobs:
   interface-tests:
+    name: '[testbed] Interface Tests (${{ matrix.gramps_ref }})'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     # Blocking gate. The interface smoke suite is the testbed's primary

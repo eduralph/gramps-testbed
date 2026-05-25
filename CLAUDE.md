@@ -231,17 +231,24 @@ coverage or adding Fedora/Arch/macOS runners.
   and Docker Image Build additionally set `continue-on-error: true` at
   job level so their workflow conclusion stays green even when the job
   check-run is red. Interface Tests runs visibly but doesn't block.
-- Check-run ownership tags: every workflow's `dorny/test-reporter` step
-  prefixes its check-run name with `[upstream]` or `[testbed]` so the PR
-  Checks UI tells you at a glance whether a red is a PR-13-side concern
-  or upstream content. `[upstream]` = the job runs gramps' own *_test.py
-  or per-addon test suites (failures are usually advisory, reflecting
-  upstream regressions or addon content). `[testbed]` = the job runs
-  testbed-owned test files (anything under this repo's `tests/`) and a
-  red there is more likely to be a real PR-side regression worth fixing.
-  Note: `[testbed] Interface Tests` also picks up `tests/test_addon_po_catalogs.py`
-  which checks addon PO catalogs, so failures there can still be
-  upstream-content driven — look at the failing test name to decide.
+- Check-run ownership tags: every entry in the PR Checks UI is
+  prefixed with `[upstream]` or `[testbed]` so the source of a red is
+  visible at a glance. The prefix is applied in two places per workflow
+  so BOTH lines in the checks list (the GitHub-Actions job conclusion
+  and the dorny/test-reporter published check-run) carry it:
+  - `jobs.<job_id>.name:` — overrides the job's display name (which
+    would otherwise be the job ID, e.g. `windows-unit-tests`).
+  - The `dorny/test-reporter` step's `name:` field.
+  Both are set to the same string for visual consistency.
+  `[upstream]` = the job runs gramps' own *_test.py or per-addon test
+  suites (failures are usually advisory, reflecting upstream regressions
+  or addon content). `[testbed]` = the job runs testbed-owned test
+  files (anything under this repo's `tests/`) — reds there are more
+  likely to be real regressions worth fixing.
+  Note: `[testbed] Interface Tests` also picks up
+  `tests/test_addon_po_catalogs.py` which checks addon PO catalogs, so
+  failures there can still be upstream-content driven — look at the
+  failing test name to decide.
 - Python env in CI:
   - Linux jobs: install `python3-gi`/`python3-pyatspi` via apt and
     create a `--system-site-packages` venv. **Do not switch to

@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   unit-tests:
+    name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Advisory gate. This job runs gramps' own *_test.py suite against an
