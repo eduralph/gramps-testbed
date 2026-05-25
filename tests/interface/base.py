@@ -198,6 +198,30 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             f"within {cls.LAUNCH_TIMEOUT_SEC}s (last error: {last_err!r})"
         )
 
+    def setUp(self) -> None:
+        """Dismiss any modal dialog that appeared since setUpClass exited.
+
+        setUpClass returns as soon as a frame titled with ``TREE_NAME``
+        is visible in AT-SPI, but Gramps still does asynchronous startup
+        work after that — emitting deferred warnings, the Tip of the Day
+        frame, and (under ``-u``) the "Gramps had a problem the last
+        time it was run" recovery prompt. Without dismissing those at
+        the start of every test, the dialog stays up and intercepts
+        clicks aimed at the main UI (sidebar toggles, etc.), so calls
+        like ``self.app.child(roleName="tree table")`` fail with
+        SearchError on what looks like an unresponsive view.
+        """
+        super().setUp()
+        app = getattr(type(self), "app", None)
+        if app is not None:
+            try:
+                type(self)._dismiss_startup_dialogs(app)
+            except Exception:
+                # Best-effort — failure here shouldn't mask the test's
+                # own assertion. We've still got the AT-SPI tree dump
+                # on test failure to debug.
+                pass
+
     @classmethod
     def _dump_subprocess_output_on_timeout(cls) -> None:
         """Print everything gramps wrote to stdout/stderr.
@@ -288,6 +312,23 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         etc.) as GtkMessageDialog instances, which surface with ``roleName``
         ``dialog`` or ``alert`` in AT-SPI. Leaving them up blocks the main loop,
         so ``gramps -O <tree>`` never actually opens the tree.
+
+        Two button-set categories are handled:
+          * generic dismissal — ``Close`` / ``OK`` / ``Cancel`` — for
+            informational warnings (e.g. "GExiv2 not available").
+          * "decline this offered tool" — ``No`` — for the
+            "Gramps had a problem the last time it was run.  Would you
+            like to run the Check and Repair tool?" dialog. This appears
+            on every launch under ``-u``/``--force-unlock`` because the
+            previous test class's tearDown sent SIGTERM/SIGKILL to
+            gramps; that looks like an unclean exit to the next launch,
+            triggering the recovery prompt.
+
+        Buttons must be ``showing=True`` — gramps puts non-visible
+        ``Cancel`` buttons on the recovery dialog (the visible buttons
+        are ``Yes`` / ``No``). Without the visibility filter, a "click"
+        on the invisible Cancel was a no-op but set ``clicked = True``,
+        so the Escape fallback was suppressed and the dialog stayed up.
         """
         for modal in app.findChildren(
             lambda n: n.roleName in ("dialog", "alert")
@@ -295,7 +336,8 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             clicked = False
             for btn in modal.findChildren(
                 lambda n: n.roleName == "push button"
-                and n.name in ("Close", "OK", "Cancel")
+                and (n.name or "") in ("Close", "OK", "Cancel", "No")
+                and getattr(n, "showing", False)
             ):
                 try:
                     btn.click()
