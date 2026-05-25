@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import os
 import subprocess
+import tempfile
 import time
 import unittest
 from pathlib import Path
@@ -99,10 +100,22 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         if cls.LAUNCH_ENV:
             launch_env = {**os.environ, **cls.LAUNCH_ENV}
 
+        # Tempfiles instead of PIPE: the wait loop below doesn't drain
+        # the captured streams, so the 64KB pipe buffer would block
+        # gramps mid-startup if it wrote that much (verbose logging,
+        # warnings, etc). Tempfiles have no buffer limit and we still
+        # get full output at timeout via _dump_subprocess_output_on_timeout.
+        cls._stdout_file = tempfile.NamedTemporaryFile(
+            mode="w+b", prefix="gramps-stdout-", suffix=".log", delete=False
+        )
+        cls._stderr_file = tempfile.NamedTemporaryFile(
+            mode="w+b", prefix="gramps-stderr-", suffix=".log", delete=False
+        )
+        cls._launched_at = time.monotonic()
         cls._proc = subprocess.Popen(
             ["gramps", *config_args, "-O", cls.TREE_NAME],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
+            stdout=cls._stdout_file,
+            stderr=cls._stderr_file,
             env=launch_env,
         )
 
@@ -110,6 +123,16 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         last_err: Exception | None = None
         app = None
         while time.monotonic() < deadline:
+            # Early-exit: if gramps already died, no point waiting for
+            # AT-SPI to show it. Break out so we dump the captured output
+            # immediately instead of blocking until LAUNCH_TIMEOUT_SEC.
+            rc = cls._proc.poll()
+            if rc is not None:
+                last_err = RuntimeError(
+                    f"gramps exited prematurely with rc={rc} after "
+                    f"{time.monotonic() - cls._launched_at:.1f}s"
+                )
+                break
             try:
                 app = root.application("gramps")
                 cls._dismiss_startup_dialogs(app)
@@ -162,30 +185,41 @@ class GrampsInterfaceTestCase(unittest.TestCase):
 
     @classmethod
     def _dump_subprocess_output_on_timeout(cls) -> None:
-        """Drain and print the gramps subprocess's captured stdout/stderr.
+        """Print everything gramps wrote to stdout/stderr.
 
-        Called after ``_terminate_process`` from the setUpClass timeout
-        path. Reading the pipe ends after termination is safe: the
-        process is dead, the pipes won't grow further, and ``.read()``
-        returns whatever was buffered up to that point. Prefixes each
-        line with ``GRAMPS-<stream>:`` so the dump is greppable in CI
-        log searches.
+        Called after ``_terminate_process`` from the setUpClass failure
+        path. Reads the tempfiles backing stdout/stderr (no 64KB pipe
+        buffer limit — gramps could write megabytes of warnings during
+        a slow startup without blocking). Prefixes each line with
+        ``GRAMPS-<stream>:`` so the dump is greppable.
         """
-        proc = getattr(cls, "_proc", None)
-        if proc is None:
-            return
-        for stream_name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr)):
-            if stream is None:
+        for stream_name, tmp_attr in (("stdout", "_stdout_file"), ("stderr", "_stderr_file")):
+            tmp = getattr(cls, tmp_attr, None)
+            if tmp is None:
                 continue
             try:
-                data = stream.read()
-            except Exception:
+                tmp.flush()
+                tmp.seek(0)
+                data = tmp.read()
+            except Exception as exc:
+                print(f"GRAMPS-{stream_name}: <failed to read tempfile: {exc!r}>")
                 continue
             if not data:
+                print(f"GRAMPS-{stream_name}: <empty>")
                 continue
             text = data.decode("utf-8", errors="replace")
             for line in text.splitlines():
                 print(f"GRAMPS-{stream_name}: {line}")
+        # Clean up the tempfiles (delete=False meant the OS didn't).
+        for tmp_attr in ("_stdout_file", "_stderr_file"):
+            tmp = getattr(cls, tmp_attr, None)
+            if tmp is None:
+                continue
+            try:
+                tmp.close()
+                os.unlink(tmp.name)
+            except Exception:
+                pass
 
     @classmethod
     def _dump_tree_on_timeout(cls) -> None:
@@ -267,6 +301,18 @@ class GrampsInterfaceTestCase(unittest.TestCase):
     @classmethod
     def tearDownClass(cls) -> None:
         cls._terminate_process()
+        # Clean up the stdout/stderr tempfiles created in setUpClass.
+        # On the failure path these are already unlinked by
+        # _dump_subprocess_output_on_timeout; this is the success path.
+        for tmp_attr in ("_stdout_file", "_stderr_file"):
+            tmp = getattr(cls, tmp_attr, None)
+            if tmp is None:
+                continue
+            try:
+                tmp.close()
+                os.unlink(tmp.name)
+            except Exception:
+                pass
         super().tearDownClass()
 
     # ---- helpers -----------------------------------------------------------
