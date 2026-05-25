@@ -6,6 +6,7 @@ venv/
 test-results/
 artifacts/
 .run/
+*.log
 .coverage
 .pytest_cache/
 .mypy_cache/
@@ -13,3 +14,9 @@ artifacts/
 .claude/settings.local.json
 fetch_comments.py
 GrampsAddonsUserManual6.0.pdf
+work/
+# triage pipeline — ignore regenerable inputs and machine output,
+# keep scripts and the curated verdicts
+triage/data/
+triage/notes/
+triage/batches/*/results/

@@ -36,6 +36,7 @@ jobs:
         branch:
           - master
           - maintenance/gramps60
+          - maintenance/gramps61
 
     steps:
       - name: Verify FORK_SYNC_TOKEN is configured

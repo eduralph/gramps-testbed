@@ -59,7 +59,7 @@ docker run --rm \
     # tight as the tests require; every entry adds startup cost.
     USER_PLUGINS="$(python3 -c "from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)")"
     mkdir -p "$USER_PLUGINS"
-    for addon in QuiltView; do
+    for addon in QuiltView CombinedView; do
       src="/workspace/addons-source/$addon"
       if [ -d "$src" ]; then
         rm -rf "$USER_PLUGINS/$addon"
@@ -73,6 +73,8 @@ docker run --rm \
     gramps -C TestTree -i /workspace/gramps/example/gramps/example.gramps
     gramps -C QuiltViewTree \
            -i /workspace/gramps-testbed/tests/interface/data/quiltview_minimal.gramps
+    gramps -C Bug14100Tree \
+           -i /workspace/gramps-testbed/tests/interface/data/bug_0014100_minimal.gramps
     # Clear stale XMLs so accumulated runs do not pollute JUnit summaries.
     rm -rf /workspace/gramps-testbed/test-results
     mkdir -p /workspace/gramps-testbed/test-results

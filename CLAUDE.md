@@ -4,8 +4,8 @@ CI/CD harness for GUI-testing Gramps and its addons via AT-SPI/dogtail.
 
 ## Workspace layout
 Expects three sibling directories:
-- `../gramps` — fork of gramps-project/gramps (branch: maintenance/gramps60)
-- `../addons-source` — fork of gramps-project/addons-source (branch: maintenance/gramps60)
+- `../gramps` — fork of gramps-project/gramps (branch: maintenance/gramps61)
+- `../addons-source` — fork of gramps-project/addons-source (branch: maintenance/gramps61)
 - `../addons` — upstream gramps-project/addons, used as make.py output target
 
 ## Upstream agent guidance
@@ -57,7 +57,7 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   skips `test_windows_*`; the Windows runner skips both `test_linux_*`
   and `test_integration_*`. Both runners include the platform-neutral
   `test_*.py` files.
-- Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.0.8),
+- Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.1.0),
   built from docker/Dockerfile.ubuntu; version is auto-read from gramps/version.py
   by the wrapper scripts so different Gramps versions get different tags
 - Do not edit files in ../gramps or ../addons-source without explicit instruction
@@ -69,10 +69,27 @@ The editing ban above still holds — work in either fork only on explicit
 instruction. This section complements the global engineering rules in
 `~/.claude/CLAUDE.md`; it does not repeat them.
 
+### Pre-flight: check upstream isn't ahead
+
+Before writing any fix (addon or core), check BOTH:
+- **Merged history** — `git log upstream/maintenance/gramps60 -- <Addon>/`
+  for addons; for core, check the matching `maintenance/gramps*` branch
+  AND `master` (a fix may have landed on `master` but not yet on
+  `maintenance/gramps61`, or vice versa).
+  (is it already fixed?)
+- **Closed/rejected PRs** — search open AND closed PRs for the addon
+  (or affected module) name on the relevant `gramps-project/*` repo
+  (did maintainers decide to delete it, or reject this fix shape?).
+
+A closed PR is signal, not noise. RebuildTypes (batch-03) was written,
+tested green, then discarded because closed PR #877 showed the author had
+agreed to delete the addon. Checking closed PRs first would have made it a
+confirm-and-close from the start.
+
 - **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
   the current production branch — the latest `maintenance/gramps*`
-  (today `maintenance/gramps60`, the default working branch for both
-  forks), not `master`. Per jralls on gramps-project/gramps#2298:
+  (today `maintenance/gramps61`), not `master`. Per jralls on
+  gramps-project/gramps#2298:
   `master` is for new features and doesn't reach users until the next
   major release, so anything users should get sooner — fixes and
   cleanups alike — goes on the maintenance branch and is forward-merged
@@ -98,9 +115,6 @@ instruction. This section complements the global engineering rules in
   line(s) the fix was checked against — open `gramps-project/gramps` or
   `gramps-project/addons-source` and cite `path:lines` (plus a SHA when
   it matters). Recollection is a hypothesis, not a verification.
-- **Check upstream isn't already ahead.** Before calling a bug unfixed,
-  grep recent upstream commits and open PRs for the same symptom — a
-  fix may have landed on `master` but not yet on `maintenance/gramps60`.
 - **One logical fix per PR.** The lint/compile backlog is deliberately
   one PR per addon per issue; keep it that way. Bundling hides mistakes.
 - **Ship the means to verify.** Prefer a regression test in the same PR
@@ -110,7 +124,7 @@ instruction. This section complements the global engineering rules in
   the PR body with a short rationale or manual repro.
 - **Edit the source, never the live plugin dir.** Addon changes go in
   `../addons-source/`. The auto-sync runs source → installed plugin
-  (`~/.local/share/gramps/gramps60/plugins/…`) one way only; edits made
+  (`~/.local/share/gramps/gramps61/plugins/…`) one way only; edits made
   directly in the plugin dir are silently lost on the next source save.
 - **PR description format:**
 
@@ -122,11 +136,19 @@ instruction. This section complements the global engineering rules in
   <what the diff does>
 
   ## Verified against
-  - gramps-project/<repo>@<sha>:<path>:<lines>
+  - <path>:<lines> — <what was checked there>
 
   ## Test
   <link to the test, or rationale for why none applies + manual repro>
   ```
+
+  In **Verified against**, cite `path:lines` plainly against the branch the
+  PR targets — no SHA; the reviewer is already on that branch. Pin a revision
+  only for a cross-branch or historical reference, stated once and labelled
+  (e.g. "line numbers as of `maintenance/gramps61` @ `<sha>`"). A commit that
+  *caused* the bug — introduced it, or is the change being corrected — gets
+  its own explicitly-labelled line; never bake a bare `@<sha>` into a
+  citation, which a reviewer reads as a bug-related commit (see gramps#2316).
 
 - **Eduard's review gate (not Claude's to perform).** Eduard opens fork
   PRs as draft and re-reads with fresh eyes before marking ready — solo
@@ -151,11 +173,12 @@ mean an issue here — not GitHub. Wiki references:
   GitHub's `#nnnn` convention does not apply inside tracker notes — the
   hash references another Mantis ticket.
 - **Linking a GitHub PR from a MantisBT note:**
-  - gramps core: `p:gramps:nnnn:` is the magic syntax the tracker's
-    GitHub integration consumes. In prose, `gramps Pull Request nnnn`
-    also works.
-  - addons-source / other addon repos: paste the full GitHub URL — no
-    shorthand exists for non-`gramps` repos.
+  - gramps core: `p:gramps:nnnn:` — the syntax documented under the
+    wiki's [Useful MantisBT bug tracker Syntax codes](https://www.gramps-project.org/wiki/index.php/Using_the_bug_tracker#Useful_MantisBT_bug_tracker_Syntax_codes)
+    section (verified against oldid=125932, edited 2025-10-18).
+    Applies only to the main `gramps` repository.
+  - addons-source / other addon repos: paste the full GitHub URL —
+    no shorthand exists for non-`gramps` repos.
 - **The PR body must reference the MantisBT issue** using the special
   keywords from upstream's Committing policies, so the tracker
   cross-links automatically. A self-assigned bug whose PR doesn't
@@ -172,6 +195,11 @@ mean an issue here — not GitHub. Wiki references:
   - On a maintenance-branch project, set the **"Fixed in version"**
     field to the next release on that branch — this is what drives the
     Change Log page for that release.
+  - If you fix a bug ahead of its **Target Version**, update Target
+    Version to the release you actually shipped it in before resolving
+    — otherwise the [Roadmap](https://gramps-project.org/bugs/roadmap_page.php)
+    display goes wrong. (`X.Y.99` phony releases mean "for X.Y
+    eventually, no milestone yet".)
   - Don't mark "resolved" until the fix is committed to the maintenance
     branch AND forward-merged to master. Both are the developer's
     responsibility, not the triager's.

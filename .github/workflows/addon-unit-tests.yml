@@ -21,13 +21,13 @@ on:
         default: ''
       gramps_ref:
         description: 'gramps branch/tag/sha'
-        default: 'maintenance/gramps60'
+        default: 'maintenance/gramps61'
       addons_source_repo:
         description: 'addons-source repo (owner/name); empty = same-owner fork'
         default: ''
       addons_ref:
         description: 'addons-source branch/tag/sha'
-        default: 'maintenance/gramps60'
+        default: 'maintenance/gramps61'
 
 # See interface-tests.yml for rationale — dorny/test-reporter needs
 # checks: write + pull-requests: write, and the repo's default token
@@ -60,14 +60,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
-          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps60' }}
+          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps61' }}
           path: gramps
 
       - name: Checkout addons-source fork
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.addons_source_repo || vars.ADDONS_SOURCE_REPO || format('{0}/addons-source', github.repository_owner) }}
-          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
+          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps61' }}
           path: addons-source
 
       - name: Install system dependencies
@@ -246,6 +246,22 @@ jobs:
             ) || fail=1
           done
           exit $fail
+
+      - name: Validate addon translation catalogs
+        # Every addons-source/<addon>/po/*.po must compile with msgfmt —
+        # the same step `make.py build` runs. A rejected catalog aborts
+        # the addon build (Mantis bug 14234), and addons-source has no
+        # unit-test CI of its own, so this testbed check is the only
+        # automated guard. `if: always()` runs it even when the addon
+        # suites above fail, so a catalog regression is never masked.
+        if: always()
+        working-directory: gramps-testbed
+        env:
+          ADDONS_SOURCE: ${{ github.workspace }}/addons-source
+        run: |
+          mkdir -p test-results/_po-catalogs
+          python -m xmlrunner tests.test_addon_po_catalogs \
+            -o test-results/_po-catalogs -v
 
       - name: Upload test results
         if: always()

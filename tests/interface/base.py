@@ -19,6 +19,7 @@ import unittest
 from pathlib import Path
 
 from dogtail.config import config
+from dogtail.rawinput import keyCombo
 from dogtail.tree import root
 from dogtail.utils import screenshot
 
@@ -38,19 +39,58 @@ class GrampsInterfaceTestCase(unittest.TestCase):
     LAUNCH_TIMEOUT_SEC: int = 60
     SCREENSHOT_DIR: Path = Path(os.environ.get("ARTIFACTS_DIR", "artifacts")) / "screenshots"
 
+    # Subclasses may launch Gramps under a specific UI language or with
+    # extra ``-c key:value`` config settings. The defaults preserve the
+    # plain English launch used by every test that does not set them.
+    LAUNCH_ENV: dict[str, str] | None = None
+    LAUNCH_CONFIG: tuple[str, ...] = ()
+
+    # When True (default), setUpClass insists that ``gramps -O TREE_NAME``
+    # actually opens the tree -- it loops until a frame titled with
+    # TREE_NAME appears, and a timeout is a class-level ERROR. Set False
+    # in a subclass whose test exercises a bug that crashes the tree-open
+    # path itself (e.g. bug 14100, where a Finnish about-date raises
+    # KeyError during render at tree-open and the launch lands on "No
+    # Family Tree loaded" instead). In that mode setUpClass records
+    # ``cls.tree_opened = False`` and returns, so the test method can
+    # fail cleanly with a clear bug-pointer message.
+    TREE_REQUIRED: bool = True
+
+    # Set by setUpClass: whether ``gramps -O TREE_NAME`` actually opened
+    # the tree. Always True under the default required-tree launch; only
+    # ever False under ``TREE_REQUIRED = False``.
+    tree_opened: bool = True
+
     @classmethod
     def setUpClass(cls) -> None:
         super().setUpClass()
         cls.SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
+        # ``-c behavior.use-tips:False`` suppresses the Tip of the Day
+        # frame, which otherwise appears asynchronously a few seconds
+        # after the main window paints and grabs input focus. With it up,
+        # raw X clicks delivered at AT-SPI label coordinates are
+        # intercepted by the tip dialog rather than reaching the
+        # widgets we're trying to drive. The setting also persists in
+        # the gramps config so subsequent launches stay clean.
+        config_args: list[str] = []
+        for setting in ("behavior.use-tips:False", *cls.LAUNCH_CONFIG):
+            config_args += ["-c", setting]
+
+        launch_env = None
+        if cls.LAUNCH_ENV:
+            launch_env = {**os.environ, **cls.LAUNCH_ENV}
+
         cls._proc = subprocess.Popen(
-            ["gramps", "-O", cls.TREE_NAME],
+            ["gramps", *config_args, "-O", cls.TREE_NAME],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            env=launch_env,
         )
 
         deadline = time.monotonic() + cls.LAUNCH_TIMEOUT_SEC
         last_err: Exception | None = None
+        app = None
         while time.monotonic() < deadline:
             try:
                 app = root.application("gramps")
@@ -60,10 +100,23 @@ class GrampsInterfaceTestCase(unittest.TestCase):
                     and cls.TREE_NAME in (n.name or "")
                 ):
                     cls.app = app
+                    cls.tree_opened = True
                     return
             except Exception as exc:
                 last_err = exc
             time.sleep(1)
+
+        # Timeout. Either gramps never reached AT-SPI (app is None), or
+        # gramps came up but never opened a frame titled TREE_NAME --
+        # i.e. ``gramps -O TREE_NAME`` failed to open the tree (e.g. it
+        # crashed while rendering the tree's content on the way in).
+        # Tests opt in to the second case by setting TREE_REQUIRED = False,
+        # which lets setUpClass return so the test method can assert
+        # about the failed tree-open instead of dying here.
+        if app is not None and not cls.TREE_REQUIRED:
+            cls.app = app
+            cls.tree_opened = False
+            return
 
         cls._capture_screenshot("launch-failure")
         cls._dump_tree_on_timeout()
@@ -114,12 +167,24 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         for modal in app.findChildren(
             lambda n: n.roleName in ("dialog", "alert")
         ):
+            clicked = False
             for btn in modal.findChildren(
                 lambda n: n.roleName == "push button"
                 and n.name in ("Close", "OK", "Cancel")
             ):
                 try:
                     btn.click()
+                    clicked = True
+                except Exception:
+                    pass
+            # Button names are localized (e.g. Finnish "Sulje"), so a
+            # named-button match can miss when Gramps runs in another
+            # language. Escape dismisses a standard GtkMessageDialog
+            # regardless of UI language.
+            if not clicked:
+                try:
+                    if modal.showing:
+                        keyCombo("Escape")
                 except Exception:
                     pass
 
