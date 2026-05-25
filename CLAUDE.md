@@ -58,6 +58,23 @@ The editing ban above still holds — work in either fork only on explicit
 instruction. This section complements the global engineering rules in
 `~/.claude/CLAUDE.md`; it does not repeat them.
 
+### Pre-flight: check upstream isn't ahead
+
+Before writing any fix (addon or core), check BOTH:
+- **Merged history** — `git log upstream/maintenance/gramps60 -- <Addon>/`
+  for addons; for core, check the matching `maintenance/gramps*` branch
+  AND `master` (a fix may have landed on `master` but not yet on
+  `maintenance/gramps61`, or vice versa).
+  (is it already fixed?)
+- **Closed/rejected PRs** — search open AND closed PRs for the addon
+  (or affected module) name on the relevant `gramps-project/*` repo
+  (did maintainers decide to delete it, or reject this fix shape?).
+
+A closed PR is signal, not noise. RebuildTypes (batch-03) was written,
+tested green, then discarded because closed PR #877 showed the author had
+agreed to delete the addon. Checking closed PRs first would have made it a
+confirm-and-close from the start.
+
 - **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
   the current production branch — the latest `maintenance/gramps*`
   (today `maintenance/gramps61`), not `master`. Per jralls on
@@ -87,9 +104,6 @@ instruction. This section complements the global engineering rules in
   line(s) the fix was checked against — open `gramps-project/gramps` or
   `gramps-project/addons-source` and cite `path:lines` (plus a SHA when
   it matters). Recollection is a hypothesis, not a verification.
-- **Check upstream isn't already ahead.** Before calling a bug unfixed,
-  grep recent upstream commits and open PRs for the same symptom — a
-  fix may have landed on `master` but not yet on `maintenance/gramps61`.
 - **One logical fix per PR.** The lint/compile backlog is deliberately
   one PR per addon per issue; keep it that way. Bundling hides mistakes.
 - **Ship the means to verify.** Prefer a regression test in the same PR
