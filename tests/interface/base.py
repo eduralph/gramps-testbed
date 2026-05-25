@@ -121,10 +121,43 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         cls._capture_screenshot("launch-failure")
         cls._dump_tree_on_timeout()
         cls._terminate_process()
+        # After terminate, drain the captured stdout/stderr. Gramps was
+        # launched with stdout=PIPE, stderr=PIPE but nothing read them
+        # during the wait loop — without this dump the only diagnostic
+        # on timeout is "gramps not in AT-SPI", which doesn't say why
+        # (crash on startup? slow startup? missing dep? lock conflict?).
+        cls._dump_subprocess_output_on_timeout()
         raise RuntimeError(
             f"Gramps main window with tree {cls.TREE_NAME!r} did not appear "
             f"within {cls.LAUNCH_TIMEOUT_SEC}s (last error: {last_err!r})"
         )
+
+    @classmethod
+    def _dump_subprocess_output_on_timeout(cls) -> None:
+        """Drain and print the gramps subprocess's captured stdout/stderr.
+
+        Called after ``_terminate_process`` from the setUpClass timeout
+        path. Reading the pipe ends after termination is safe: the
+        process is dead, the pipes won't grow further, and ``.read()``
+        returns whatever was buffered up to that point. Prefixes each
+        line with ``GRAMPS-<stream>:`` so the dump is greppable in CI
+        log searches.
+        """
+        proc = getattr(cls, "_proc", None)
+        if proc is None:
+            return
+        for stream_name, stream in (("stdout", proc.stdout), ("stderr", proc.stderr)):
+            if stream is None:
+                continue
+            try:
+                data = stream.read()
+            except Exception:
+                continue
+            if not data:
+                continue
+            text = data.decode("utf-8", errors="replace")
+            for line in text.splitlines():
+                print(f"GRAMPS-{stream_name}: {line}")
 
     @classmethod
     def _dump_tree_on_timeout(cls) -> None:
