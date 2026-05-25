@@ -43,6 +43,19 @@ if ! docker image inspect "$IMAGE" >/dev/null 2>&1; then
   docker build -f gramps-testbed/docker/Dockerfile.ubuntu -t "$IMAGE" gramps-testbed
 fi
 
+# Auto-clean stale gramps/build/ before the in-container pip install.
+# gramps' build_hook rmtrees this dir at install time and dies with
+# PermissionError when prior runs left it owned by a uid that doesn't
+# match the host user (typical when the container's `runner` uid=1000
+# != the host uid, or after a one-off `docker run -u root` left
+# root-owned artefacts). clean-build.sh picks host-side rm or
+# container-as-root rm based on actual permissions.
+build_dir="$WORKSPACE/gramps/build"
+if [[ -d "$build_dir" ]] && [[ "$(stat -c %u "$build_dir" 2>/dev/null || echo 0)" != "$(id -u)" ]]; then
+  echo "→ stale gramps/build/ detected (uid mismatch); calling clean-build.sh"
+  "$WORKSPACE/gramps-testbed/scripts/ubuntu/clean-build.sh"
+fi
+
 # Positional args are passed through to the container as a whitespace-
 # separated list. Empty = "discover all addons with tests/test_*.py".
 TARGET_ADDONS="$*"
