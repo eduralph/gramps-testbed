@@ -150,8 +150,20 @@ jobs:
         # Python had no marker, so pip silently installed into the
         # wrong site-packages.) Activating the venv routes pip/python
         # through .venv/bin and bypasses PEP 668 (venvs aren't marked).
+        #
+        # The orjson==3.11.7 pre-pin mirrors aio/build.sh:83 on
+        # maintenance/gramps61 (Steve Youngs, commit 3d99a8d9, 2026-04-23,
+        # "Pin orjson to 3.11.7"). orjson has no MSYS2 wheel at any
+        # version, so pip always source-builds it via maturin. Under
+        # UCRT64 Python 3.14, the unpinned latest (3.11.9) pulls in
+        # maturin 1.13.3 whose own source build fails at metadata
+        # generation. 3.11.7's build chain succeeds. Without this
+        # pre-pin, `pip install -e gramps[testing]` resolves orjson
+        # transitively to the latest and dies. Keep this pin in sync
+        # with aio/build.sh — when upstream bumps the pin, bump here.
         run: |
           source .venv/bin/activate
+          pip install --upgrade 'orjson==3.11.7'
           pip install -r gramps-testbed/requirements-test.txt
           # [testing] extras pulls in jsonschema/mock/lxml from gramps
           # setup.py, which some of gramps' own *_test.py files import.

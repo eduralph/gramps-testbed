@@ -88,6 +88,15 @@ fi
 source "$VENV/bin/activate"
 python -m pip install --upgrade pip
 
+# orjson==3.11.7 pre-pin mirrors aio/build.sh:83 on
+# maintenance/gramps61 (Steve Youngs, commit 3d99a8d9, "Pin orjson to
+# 3.11.7"). orjson has no MSYS2 wheel at any version — pip always
+# source-builds via maturin. Under UCRT64 Python 3.14 the unpinned
+# latest (3.11.9) pulls in a maturin version whose own source build
+# fails; 3.11.7 builds cleanly. Without this pre-pin,
+# `pip install -e gramps[testing]` resolves orjson transitively and
+# dies on the maturin build. Keep in sync with aio/build.sh.
+pip install --upgrade 'orjson==3.11.7'
 pip install -r "$WORKSPACE/gramps-testbed/requirements-test.txt"
 # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
 # matching scripts/ubuntu/run-unit.sh. pip rejects extras syntax on

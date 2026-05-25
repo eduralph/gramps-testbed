@@ -87,6 +87,18 @@ INSTALL_LOGS="$RESULTS_DIR/install-logs"
 rm -rf "$RESULTS_DIR"
 mkdir -p "$INSTALL_LOGS"
 
+# orjson==3.11.7 pre-pin mirrors aio/build.sh:83 — see the longer
+# rationale in scripts/windows/run-unit.sh. Without this, gramps[testing]
+# resolves orjson transitively to the latest, which fails to source-build
+# on UCRT64 Python 3.14.
+orjson_log="$INSTALL_LOGS/orjson-pin.log"
+if ! pip install --progress-bar off -q --no-warn-script-location \
+        --upgrade 'orjson==3.11.7' >"$orjson_log" 2>&1; then
+  echo "× orjson==3.11.7 pin install failed — last 40 lines of $orjson_log:" >&2
+  tail -n 40 "$orjson_log" >&2
+  exit 1
+fi
+
 # Quiet mode + log capture for the gramps install: on failure we tail
 # the log and surface the path; on success nothing is printed.
 gramps_log="$INSTALL_LOGS/gramps-testing.log"

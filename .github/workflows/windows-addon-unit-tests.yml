@@ -128,8 +128,14 @@ jobs:
         # Short version: UCRT64's Python 3.14 has PEP 668's
         # EXTERNALLY-MANAGED marker; $GITHUB_PATH doesn't carry the
         # venv prepend across to subsequent msys2 shells.
+        #
+        # orjson==3.11.7 pre-pin mirrors aio/build.sh:83 — see the
+        # longer rationale in windows-unit-tests.yml. Without this,
+        # gramps[testing]'s transitive resolution picks the latest
+        # orjson, which fails to source-build under cp314 UCRT64.
         run: |
           source .venv/bin/activate
+          pip install --upgrade 'orjson==3.11.7'
           pip install -r gramps-testbed/requirements-test.txt
           pip install -e 'gramps[testing]'
 
