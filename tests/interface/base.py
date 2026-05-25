@@ -66,15 +66,33 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         super().setUpClass()
         cls.SCREENSHOT_DIR.mkdir(parents=True, exist_ok=True)
 
-        # ``-c behavior.use-tips:False`` suppresses the Tip of the Day
-        # frame, which otherwise appears asynchronously a few seconds
-        # after the main window paints and grabs input focus. With it up,
-        # raw X clicks delivered at AT-SPI label coordinates are
-        # intercepted by the tip dialog rather than reaching the
-        # widgets we're trying to drive. The setting also persists in
-        # the gramps config so subsequent launches stay clean.
+        # The defaults below are PERSISTED writes to ~/.gramps/grampsrc.
+        # Every test launch starts by resetting these, which guards against
+        # state leaking from a previous test class. Subclasses can still
+        # override individual settings via LAUNCH_CONFIG; the per-subclass
+        # entries appear AFTER the defaults below, so they win.
+        #
+        # - behavior.use-tips:False suppresses the Tip of the Day frame,
+        #   which otherwise appears asynchronously a few seconds after
+        #   the main window paints and grabs input focus, intercepting
+        #   raw X clicks aimed at AT-SPI label coordinates.
+        # - preferences.date-format:0 resets to the safe ISO-like default.
+        #   Without this, Bug14100RelviewInflectionKeyErrorTest's
+        #   LAUNCH_CONFIG=("preferences.date-format:2",) — the Finnish
+        #   long-month format — persists into subsequent tests. When those
+        #   tests reopen TestTree (whose example.gramps data contains
+        #   "about January 1652"-style dates), gramps hits the
+        #   KeyError: 'noin' inflection bug (Mantis 14100, fix gramps#2322
+        #   not yet merged) while rendering the tree, and hangs in
+        #   startup before reaching AT-SPI registration — manifesting as
+        #   SearchError("Application 'gramps' was not found in desktop")
+        #   in SmokeTest / CombinedViewStaleCloseTest setUpClass.
+        defaults = (
+            "behavior.use-tips:False",
+            "preferences.date-format:0",
+        )
         config_args: list[str] = []
-        for setting in ("behavior.use-tips:False", *cls.LAUNCH_CONFIG):
+        for setting in (*defaults, *cls.LAUNCH_CONFIG):
             config_args += ["-c", setting]
 
         launch_env = None
@@ -119,6 +137,16 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             return
 
         cls._capture_screenshot("launch-failure")
+        # poll() BEFORE terminate distinguishes "gramps already exited
+        # on its own" (returncode is an int) from "still running"
+        # (returncode is None — we are about to send SIGTERM). A
+        # silent crash with no traceback otherwise looks identical to
+        # a slow startup.
+        pre_kill_rc = cls._proc.poll() if getattr(cls, "_proc", None) else None
+        if pre_kill_rc is not None:
+            print(f"GRAMPS-EXIT: process exited on its own with rc={pre_kill_rc}")
+        else:
+            print("GRAMPS-EXIT: process still running at timeout (will SIGTERM)")
         cls._dump_tree_on_timeout()
         cls._terminate_process()
         # After terminate, drain the captured stdout/stderr. Gramps was
@@ -166,6 +194,21 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             app = root.application("gramps")
         except Exception:
             print("TIMEOUT-DUMP: gramps application not visible in AT-SPI")
+            # When gramps isn't visible under that exact name, the next
+            # most useful question is "what IS visible". A misnamed
+            # process (e.g. registered as 'python3' instead of 'gramps')
+            # would show up here, as would an empty registry indicating
+            # the AT-SPI bridge itself died.
+            try:
+                visible = []
+                for child in root.children:
+                    try:
+                        visible.append(getattr(child, "name", "") or "?")
+                    except Exception:
+                        visible.append("?")
+                print(f"TIMEOUT-DUMP: AT-SPI registry has {len(visible)} apps: {visible!r}")
+            except Exception as exc:
+                print(f"TIMEOUT-DUMP: failed to enumerate AT-SPI registry: {exc!r}")
             return
 
         def _walk(node, depth: int = 0, max_depth: int = 6) -> None:
