@@ -123,7 +123,13 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Install Python dependencies
+        # See windows-unit-tests.yml for why `source .venv/bin/activate`
+        # is required at the top of each step that runs pip/python.
+        # Short version: UCRT64's Python 3.14 has PEP 668's
+        # EXTERNALLY-MANAGED marker; $GITHUB_PATH doesn't carry the
+        # venv prepend across to subsequent msys2 shells.
         run: |
+          source .venv/bin/activate
           pip install -r gramps-testbed/requirements-test.txt
           pip install -e 'gramps[testing]'
 
@@ -133,7 +139,9 @@ jobs:
         # are tolerated per-package so a broken transitive build (e.g.
         # psycopg2 without libpq) does not abort the batch — the
         # affected addon's tests will skip or fail in isolation.
+        # `source .venv/bin/activate` — see Install Python dependencies.
         run: |
+          source .venv/bin/activate
           addon_mods=$(python - <<'PY'
           import ast, glob, re
           pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
@@ -181,9 +189,11 @@ jobs:
         # cygpath -w converts POSIX paths to Windows paths for the
         # MSYS2-native Python interpreter, which is the form xmlrunner
         # writes to and GRAMPS_RESOURCES is read as.
+        # `source .venv/bin/activate` — see Install Python dependencies.
         env:
           ADDONS: ${{ github.event.inputs.addons }}
         run: |
+          source "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin/activate"
           ws_posix="$(cygpath -u "$GITHUB_WORKSPACE")"
           results_dir="$ws_posix/gramps-testbed/test-results"
           mkdir -p "$results_dir"

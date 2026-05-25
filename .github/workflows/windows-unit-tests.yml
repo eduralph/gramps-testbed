@@ -140,7 +140,18 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Install Python dependencies
+        # `source .venv/bin/activate` is required (not just $GITHUB_PATH
+        # from the venv-setup step): with `shell: msys2 {0}`, each step
+        # gets a fresh msys2 bash whose PATH inherits from setup-msys2's
+        # mingw context, not from the GITHUB_PATH prepend. UCRT64's
+        # Python 3.14 ships PEP 668's EXTERNALLY-MANAGED marker, so any
+        # bare `pip` call resolves to /ucrt64/bin/pip and refuses to
+        # install. (Under MINGW64 this was a latent bug — the older
+        # Python had no marker, so pip silently installed into the
+        # wrong site-packages.) Activating the venv routes pip/python
+        # through .venv/bin and bypasses PEP 668 (venvs aren't marked).
         run: |
+          source .venv/bin/activate
           pip install -r gramps-testbed/requirements-test.txt
           # [testing] extras pulls in jsonschema/mock/lxml from gramps
           # setup.py, which some of gramps' own *_test.py files import.
@@ -160,11 +171,13 @@ jobs:
         # Mirrors scripts/windows/run-unit.sh. cygpath -w converts the
         # POSIX results path back to a Windows path so the MSYS2-native
         # Python interpreter writes to the location the next step (and
-        # actions/upload-artifact) can find.
+        # actions/upload-artifact) can find. `source .venv/bin/activate`
+        # — see Install Python dependencies for the rationale.
         working-directory: gramps
         env:
           GRAMPS_RESOURCES: .
         run: |
+          source "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin/activate"
           ws_posix="$(cygpath -u "$GITHUB_WORKSPACE")"
           mkdir -p "$ws_posix/gramps-testbed/test-results"
           python -m xmlrunner discover \
