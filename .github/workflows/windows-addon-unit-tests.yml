@@ -277,6 +277,6 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           working-directory: gramps-testbed
-          name: Windows Addon Unit Tests
+          name: '[upstream] Windows Addon Unit Tests'
           path: test-results/**/*.xml
           reporter: java-junit

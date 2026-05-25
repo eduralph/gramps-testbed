@@ -238,6 +238,6 @@ jobs:
         uses: dorny/test-reporter@v1
         with:
           working-directory: gramps-testbed
-          name: Windows Unit Tests (${{ matrix.gramps_ref }})
+          name: '[upstream] Windows Unit Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit

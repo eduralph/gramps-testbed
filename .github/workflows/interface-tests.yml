@@ -212,6 +212,6 @@ jobs:
           # itself is the natural anchor; path is resolved relative to
           # it, so the glob drops its `gramps-testbed/` prefix.
           working-directory: gramps-testbed
-          name: Interface Tests (${{ matrix.gramps_ref }})
+          name: '[testbed] Interface Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit

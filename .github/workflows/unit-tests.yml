@@ -156,6 +156,6 @@ jobs:
           # checkouts use `path:` subdirs so the workflow root isn't a
           # git repo; anchor on the testbed checkout.
           working-directory: gramps-testbed
-          name: Unit Tests (${{ matrix.gramps_ref }})
+          name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit
