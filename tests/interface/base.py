@@ -350,11 +350,66 @@ class GrampsInterfaceTestCase(unittest.TestCase):
         try:
             screenshot(str(path))
         except Exception:
-            # screenshots are best-effort; don't mask the original failure
+            # screenshots are best-effort; don't mask the original failure.
+            # dogtail's screenshot helper requires the ``dasbus`` Python
+            # package which isn't installed in CI, so this typically silently
+            # no-ops there (see test_bug_0002092_geography_focused for a
+            # Gdk-pixbuf-based screenshot helper that works in the same env).
             pass
+
+    @classmethod
+    def _dump_app_tree_on_failure(cls, label: str) -> None:
+        """Walk and print the AT-SPI tree of the gramps app at failure time.
+
+        dogtail's screenshot is broken in this environment (missing dasbus
+        package — see ``_capture_screenshot``), so visual evidence isn't
+        available. The AT-SPI tree dump is the next-best diagnostic: it
+        tells you what widgets exist (and which don't) when a test like
+        ``self.app.child(roleName="tree table")`` raises SearchError, so
+        you can tell whether the test was timing-racing against an
+        in-progress view switch, looking for the wrong role/name, or the
+        addon's view never registered at all. Prefixes each line with
+        ``FAILDUMP-<label>:`` so the per-test output is greppable.
+        """
+        app = getattr(cls, "app", None)
+        if app is None:
+            print(f"FAILDUMP-{label}: cls.app is None — no AT-SPI tree to dump")
+            return
+
+        def _walk(node, depth: int = 0, max_depth: int = 8) -> None:
+            try:
+                name = (getattr(node, "name", "") or "").strip()
+                role = getattr(node, "roleName", "") or ""
+                showing = getattr(node, "showing", "?")
+                print(
+                    f"FAILDUMP-{label}: {'  ' * depth}[{role}] {name!r} "
+                    f"(showing={showing})"
+                )
+            except Exception as exc:
+                print(f"FAILDUMP-{label}: {'  ' * depth}<failed node read: {exc!r}>")
+                return
+            if depth >= max_depth:
+                return
+            try:
+                children = list(node.children)
+            except Exception:
+                return
+            for child in children:
+                _walk(child, depth + 1, max_depth)
+
+        print(f"FAILDUMP-{label} >>> begin")
+        try:
+            _walk(app)
+        except Exception as exc:
+            print(f"FAILDUMP-{label}: walk aborted: {exc!r}")
+        print(f"FAILDUMP-{label} <<< end")
 
     def run(self, result=None):  # type: ignore[override]
         outcome = super().run(result)
         if result is not None and (result.failures or result.errors):
             type(self)._capture_screenshot(self._testMethodName)
+            # AT-SPI tree dump on failure: tells us what was visible at
+            # the moment of the assertion. See _dump_app_tree_on_failure
+            # for rationale (dogtail screenshot is broken in CI).
+            type(self)._dump_app_tree_on_failure(self._testMethodName)
         return outcome
