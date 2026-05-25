@@ -112,8 +112,23 @@ class GrampsInterfaceTestCase(unittest.TestCase):
             mode="w+b", prefix="gramps-stderr-", suffix=".log", delete=False
         )
         cls._launched_at = time.monotonic()
+        # ``-u`` / ``--force-unlock`` breaks any stale lock file on
+        # ``TREE_NAME`` from a previous test class's gramps that was
+        # SIGKILL'd by ``_terminate_process`` (the tear-down sends SIGTERM
+        # with a 10s grace period, then SIGKILL; SIGKILL doesn't let
+        # gramps release the BSD lock file under
+        # ``~/.gramps/grampsdb/<TREE>/``). Without this flag, the next
+        # gramps starts up, hits ``check_db`` in
+        # ``gramps/cli/arghandler.py``, sees a locked tree, calls
+        # ``self.__error("Database is locked, cannot open it!")``, which
+        # under GUI mode (DISPLAY set under Xvfb) routes to the GUI
+        # errorfunc and shows an invisible dialog instead of printing to
+        # stderr, then ``sys.exit(1)``. Manifests as gramps exiting
+        # silently with rc=1 about 3-4s into the launch (post-argparse,
+        # mid-DB-open), which is exactly what we see for the failing
+        # SmokeTest and CombinedViewStaleCloseTest setUpClasses.
         cls._proc = subprocess.Popen(
-            ["gramps", *config_args, "-O", cls.TREE_NAME],
+            ["gramps", "-u", *config_args, "-O", cls.TREE_NAME],
             stdout=cls._stdout_file,
             stderr=cls._stderr_file,
             env=launch_env,
