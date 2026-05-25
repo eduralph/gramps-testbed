@@ -48,10 +48,19 @@ PACMAN_PKGS=(
   mingw-w64-ucrt-x86_64-python-lxml
   mingw-w64-ucrt-x86_64-python-jsonschema
   mingw-w64-ucrt-x86_64-python-pillow
-  mingw-w64-ucrt-x86_64-gexiv2
+  # python-maturin + rust: needed to build orjson from source on UCRT64.
+  # orjson has no MSYS2-tagged PyPI wheel and pip's isolated PEP 517
+  # build fails because PyPI maturin's own source build fails under
+  # cp314 UCRT64. MSYS2 packages a working maturin (built for the MSYS2
+  # Python ABI); we use it via --no-build-isolation during orjson install.
+  # See run-unit.sh's pip section below for the full chain, and
+  # work/PR13-WORKSTREAM-A-build-orjson.md for context.
+  mingw-w64-ucrt-x86_64-python-maturin
+  mingw-w64-ucrt-x86_64-rust
   mingw-w64-ucrt-x86_64-gtk3
   mingw-w64-ucrt-x86_64-osm-gps-map
   mingw-w64-ucrt-x86_64-goocanvas
+  mingw-w64-ucrt-x86_64-gexiv2
   mingw-w64-ucrt-x86_64-gettext
   intltool
 )
@@ -88,20 +97,40 @@ fi
 source "$VENV/bin/activate"
 python -m pip install --upgrade pip
 
-# orjson==3.11.7 pre-pin mirrors aio/build.sh:83 on
-# maintenance/gramps61 (Steve Youngs, commit 3d99a8d9, "Pin orjson to
-# 3.11.7"). orjson has no MSYS2 wheel at any version — pip always
-# source-builds via maturin. Under UCRT64 Python 3.14 the unpinned
-# latest (3.11.9) pulls in a maturin version whose own source build
-# fails; 3.11.7 builds cleanly. Without this pre-pin,
-# `pip install -e gramps[testing]` resolves orjson transitively and
-# dies on the maturin build. Keep in sync with aio/build.sh.
-pip install --upgrade 'orjson==3.11.7'
+# orjson source build on UCRT64 Python 3.14 — bespoke chain.
+# ----------------------------------------------------------
+# orjson has no PyPI wheel for the MSYS2 UCRT64 cp314 tag, so pip
+# source-builds it via maturin. PyPI's own maturin source build ALSO
+# fails under cp314 UCRT64 → dead end. We sidestep that by installing
+# MSYS2's pacman-built maturin (mingw-w64-ucrt-x86_64-python-maturin,
+# in PACMAN_PKGS above) which IS built for the MSYS2 Python ABI, and
+# tell pip not to isolate the build env so it uses that maturin.
+#
+# orjson version pinned to 3.11.7 to mirror aio/build.sh:83 on
+# maintenance/gramps61. When upstream bumps the pin, bump here.
+#
+# DELETE-WHEN: MSYS2 ships an orjson cp314 wheel for UCRT64. At that
+# point this whole no-build-isolation dance can collapse back to a
+# plain `pip install -e ./gramps[testing]`.
+echo "→ verifying pacman-supplied maturin is importable"
+maturin --version
+python -c "import maturin; print('maturin', maturin.__file__)"
+echo "→ building orjson==3.11.7 with --no-build-isolation"
+pip install --no-build-isolation --upgrade 'orjson==3.11.7'
+# Rust extension ABI mismatches don't show until import — fail fast here.
+echo "→ smoke-testing orjson"
+python -c "import orjson; print(orjson.__version__); print(orjson.dumps({'x':1})); print(orjson.loads(b'{\"y\":2}'))"
+
 pip install -r "$WORKSPACE/gramps-testbed/requirements-test.txt"
 # [testing] extras pulls in jsonschema/mock/lxml from gramps setup.py,
 # matching scripts/ubuntu/run-unit.sh. pip rejects extras syntax on
 # absolute paths, so cd in first.
 (cd "$WORKSPACE" && pip install -e "./gramps[testing]")
+# Confirm the module that triggered the original collection failure
+# now loads (gramps.gen.lib.json_utils imports orjson unconditionally
+# at module load).
+echo "→ smoke-testing gramps.gen.lib.json_utils"
+python -c "import gramps.gen.lib.json_utils"
 
 # Compile .mo translations so gramps.gen imports do not emit
 # "Missing or invalid localedir" warnings during collection.

@@ -49,10 +49,14 @@ PACMAN_PKGS=(
   mingw-w64-ucrt-x86_64-python-lxml
   mingw-w64-ucrt-x86_64-python-jsonschema
   mingw-w64-ucrt-x86_64-python-pillow
-  mingw-w64-ucrt-x86_64-gexiv2
+  # python-maturin + rust: needed for orjson source build on UCRT64 —
+  # see scripts/windows/run-unit.sh for the full rationale.
+  mingw-w64-ucrt-x86_64-python-maturin
+  mingw-w64-ucrt-x86_64-rust
   mingw-w64-ucrt-x86_64-gtk3
   mingw-w64-ucrt-x86_64-osm-gps-map
   mingw-w64-ucrt-x86_64-goocanvas
+  mingw-w64-ucrt-x86_64-gexiv2
   mingw-w64-ucrt-x86_64-gettext
   intltool
 )
@@ -87,14 +91,30 @@ INSTALL_LOGS="$RESULTS_DIR/install-logs"
 rm -rf "$RESULTS_DIR"
 mkdir -p "$INSTALL_LOGS"
 
-# orjson==3.11.7 pre-pin mirrors aio/build.sh:83 — see the longer
-# rationale in scripts/windows/run-unit.sh. Without this, gramps[testing]
-# resolves orjson transitively to the latest, which fails to source-build
-# on UCRT64 Python 3.14.
-orjson_log="$INSTALL_LOGS/orjson-pin.log"
+# orjson==3.11.7 build via pacman-supplied maturin (--no-build-isolation).
+# See scripts/windows/run-unit.sh for the full rationale around why this
+# detour is necessary on UCRT64 Python 3.14 (no PyPI wheel + PyPI maturin
+# source build also fails).
+orjson_log="$INSTALL_LOGS/orjson-build.log"
+{
+  maturin --version
+  python -c "import maturin; print('maturin', maturin.__file__)"
+} >"$orjson_log" 2>&1 || {
+  echo "× maturin import probe failed — last 40 lines of $orjson_log:" >&2
+  tail -n 40 "$orjson_log" >&2
+  exit 1
+}
 if ! pip install --progress-bar off -q --no-warn-script-location \
-        --upgrade 'orjson==3.11.7' >"$orjson_log" 2>&1; then
-  echo "× orjson==3.11.7 pin install failed — last 40 lines of $orjson_log:" >&2
+        --no-build-isolation --upgrade 'orjson==3.11.7' >>"$orjson_log" 2>&1; then
+  echo "× orjson==3.11.7 build failed — last 40 lines of $orjson_log:" >&2
+  tail -n 40 "$orjson_log" >&2
+  exit 1
+fi
+# Smoke-test orjson — a Rust extension can install against the wrong ABI
+# and segfault on import. Catch here, not deep into a test run.
+if ! python -c "import orjson; orjson.dumps({'x':1}); orjson.loads(b'{\"y\":2}')" \
+        >>"$orjson_log" 2>&1; then
+  echo "× orjson import smoke-test failed — last 40 lines of $orjson_log:" >&2
   tail -n 40 "$orjson_log" >&2
   exit 1
 fi

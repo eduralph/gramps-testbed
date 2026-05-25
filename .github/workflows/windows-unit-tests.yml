@@ -91,6 +91,8 @@ jobs:
             mingw-w64-ucrt-x86_64-python-lxml
             mingw-w64-ucrt-x86_64-python-jsonschema
             mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-python-maturin
+            mingw-w64-ucrt-x86_64-rust
             mingw-w64-ucrt-x86_64-gexiv2
             mingw-w64-ucrt-x86_64-gtk3
             mingw-w64-ucrt-x86_64-osm-gps-map
@@ -151,23 +153,50 @@ jobs:
         # wrong site-packages.) Activating the venv routes pip/python
         # through .venv/bin and bypasses PEP 668 (venvs aren't marked).
         #
-        # The orjson==3.11.7 pre-pin mirrors aio/build.sh:83 on
-        # maintenance/gramps61 (Steve Youngs, commit 3d99a8d9, 2026-04-23,
-        # "Pin orjson to 3.11.7"). orjson has no MSYS2 wheel at any
-        # version, so pip always source-builds it via maturin. Under
-        # UCRT64 Python 3.14, the unpinned latest (3.11.9) pulls in
-        # maturin 1.13.3 whose own source build fails at metadata
-        # generation. 3.11.7's build chain succeeds. Without this
-        # pre-pin, `pip install -e gramps[testing]` resolves orjson
-        # transitively to the latest and dies. Keep this pin in sync
-        # with aio/build.sh — when upstream bumps the pin, bump here.
+        # orjson source build on UCRT64 Python 3.14 — bespoke chain
+        # ------------------------------------------------------------
+        # orjson has no PyPI wheel for the MSYS2 UCRT64 Python tag
+        # (mingw_x86_64_ucrt_llvm). pip falls back to source build via
+        # maturin. maturin's PyPI source build ALSO has no UCRT64 cp314
+        # wheel and ITS source build fails at metadata generation under
+        # cp314. So pip's default isolated build is a dead end.
+        #
+        # The escape: MSYS2 itself packages a working maturin for UCRT64
+        # (`mingw-w64-ucrt-x86_64-python-maturin`, built against the
+        # MSYS2 Python ABI). Installed via pacman above, it lives in
+        # /ucrt64/.../site-packages and is visible from the venv (which
+        # is --system-site-packages). With `--no-build-isolation`, pip
+        # uses THAT maturin to build orjson instead of trying to source-
+        # build its own.
+        #
+        # orjson version is pinned to 3.11.7 to mirror aio/build.sh:83
+        # on maintenance/gramps61 (Steve Youngs, commit 3d99a8d9,
+        # 2026-04-23). When upstream bumps the orjson pin, bump here.
+        #
+        # DELETE-WHEN: MSYS2 ships a cp314 wheel for orjson on UCRT64
+        # (so pip wheel-matching resolves directly). At that point this
+        # whole no-build-isolation dance can collapse back to a plain
+        # `pip install -e gramps[testing]`.
         run: |
           source .venv/bin/activate
-          pip install --upgrade 'orjson==3.11.7'
+          # Sanity: the pacman-installed maturin is importable in the venv.
+          maturin --version
+          python -c "import maturin; print('maturin', maturin.__file__)"
+          # --no-build-isolation makes pip use the venv's (pacman-supplied)
+          # maturin instead of trying to source-build its own.
+          pip install --no-build-isolation --upgrade 'orjson==3.11.7'
+          # Smoke-test orjson now, before gramps install — a Rust ext can
+          # link against the wrong ABI and segfault on import. Catch that
+          # here, not 8 minutes into a test run.
+          python -c "import orjson; print(orjson.__version__); print(orjson.dumps({'x':1})); print(orjson.loads(b'{\"y\":2}'))"
           pip install -r gramps-testbed/requirements-test.txt
           # [testing] extras pulls in jsonschema/mock/lxml from gramps
           # setup.py, which some of gramps' own *_test.py files import.
           pip install -e 'gramps[testing]'
+          # Confirm the module that triggered the original collection
+          # failure now loads (gramps.gen.lib.json_utils imports orjson
+          # unconditionally at module load).
+          python -c "import gramps.gen.lib.json_utils"
 
       - name: Compile Gramps translations
         working-directory: gramps

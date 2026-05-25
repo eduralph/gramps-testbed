@@ -86,6 +86,8 @@ jobs:
             mingw-w64-ucrt-x86_64-python-lxml
             mingw-w64-ucrt-x86_64-python-jsonschema
             mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-python-maturin
+            mingw-w64-ucrt-x86_64-rust
             mingw-w64-ucrt-x86_64-gexiv2
             mingw-w64-ucrt-x86_64-gtk3
             mingw-w64-ucrt-x86_64-osm-gps-map
@@ -123,21 +125,20 @@ jobs:
             pip-${{ runner.os }}-
 
       - name: Install Python dependencies
-        # See windows-unit-tests.yml for why `source .venv/bin/activate`
-        # is required at the top of each step that runs pip/python.
-        # Short version: UCRT64's Python 3.14 has PEP 668's
-        # EXTERNALLY-MANAGED marker; $GITHUB_PATH doesn't carry the
-        # venv prepend across to subsequent msys2 shells.
-        #
-        # orjson==3.11.7 pre-pin mirrors aio/build.sh:83 — see the
-        # longer rationale in windows-unit-tests.yml. Without this,
-        # gramps[testing]'s transitive resolution picks the latest
-        # orjson, which fails to source-build under cp314 UCRT64.
+        # See windows-unit-tests.yml for the full rationale around:
+        #   - source .venv/bin/activate (PEP 668 + $GITHUB_PATH)
+        #   - --no-build-isolation + pacman python-maturin (orjson on UCRT64)
+        #   - orjson==3.11.7 pin (mirrors aio/build.sh:83)
+        #   - import-smoke-test after build (catch ABI mismatches early)
         run: |
           source .venv/bin/activate
-          pip install --upgrade 'orjson==3.11.7'
+          maturin --version
+          python -c "import maturin; print('maturin', maturin.__file__)"
+          pip install --no-build-isolation --upgrade 'orjson==3.11.7'
+          python -c "import orjson; print(orjson.__version__); print(orjson.dumps({'x':1})); print(orjson.loads(b'{\"y\":2}'))"
           pip install -r gramps-testbed/requirements-test.txt
           pip install -e 'gramps[testing]'
+          python -c "import gramps.gen.lib.json_utils"
 
       - name: Install addon runtime deps (derived from requires_mod)
         # Auto-derive the union of requires_mod across every .gpr.py in
