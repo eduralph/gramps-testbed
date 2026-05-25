@@ -51,6 +51,14 @@ root cause than the live defect in current source.
    - `SUMMARY.md` — root cause, fix, test, repo+branch targeted
    - `patch.diff` — the change (in the sibling repo; do not commit it for Eduard)
    - `pr-description.md` — following CLAUDE.md's PR format exactly
+   - `mantis-comment.md` — ready-to-paste tracker comment, in Eduard's voice
+     (he pastes it verbatim). REQUIRED for every item that has a Mantis tracker
+     entry, regardless of outcome (fix, cannot-reproduce, already-fixed,
+     wontfix, invalid-input). State the resolution, the fixing commit and/or PR
+     if any, and "Fixed in version" where applicable. Do not just reference
+     MANTIS_ACTIONS.md — generate the actual comment text (templates there are a
+     starting point, not a substitute). Exempt only: items with NO Mantis entry
+     (e.g. detector (c)-bucket items), which note "no Mantis issue" instead.
 6. STOP. Eduard reviews, then decides on commit/push/PR.
 
 ## Reminders from project conventions
