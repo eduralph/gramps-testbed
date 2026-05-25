@@ -14,7 +14,7 @@ SyntaxError is unconditional.
 
 ## ===== TRIAGE VERDICT =====
 - **Actionable?** yes — near-certain fast fix.
-- **Where:** addons-source (in-tree). Confirm the addon dir, branch maintenance/gramps61.
+- **Where:** addons-source (in-tree). Confirm the addon dir, branch maintenance/gramps60.
 - **Root cause:** an unclosed `(` — a literal Python syntax error in the source. Find the
   unbalanced parenthesis (the traceback line number from a `python3 -m py_compile` on the
   file points at it) and close it.

@@ -13,7 +13,7 @@ replaces it). This is unported Python-2 code — the addon has never worked on P
 
 ## ===== TRIAGE VERDICT =====
 - **Actionable?** yes — near-certain fast fix, classic Py2→Py3 port.
-- **Where:** addons-source (in-tree). Confirm dir, branch maintenance/gramps61.
+- **Where:** addons-source (in-tree). Confirm dir, branch maintenance/gramps60.
 - **Root cause:** `from itertools import imap` (and likely usages of `imap(...)`).
   In Py3, `imap` → builtin `map` (already lazy). Remove the import; replace `imap(` calls
   with `map(`.

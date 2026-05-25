@@ -14,7 +14,7 @@ sys.path — which it was under old Gramps packaging but is not now; the correct
 
 ## ===== TRIAGE VERDICT =====
 - **Actionable?** yes — near-certain one-line fix.
-- **Where:** addons-source (in-tree). Confirm dir, branch maintenance/gramps61.
+- **Where:** addons-source (in-tree). Confirm dir, branch maintenance/gramps60.
 - **Root cause:** a bare `gui` import that should be `gramps.gui`. Find it
   (`grep -n 'import gui' RebuildTypes/`) and qualify it to `gramps.gui`.
 - **Fix sketch:** change `import gui` → `from gramps import gui` (or

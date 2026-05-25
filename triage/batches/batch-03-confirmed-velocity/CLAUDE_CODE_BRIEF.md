@@ -5,7 +5,7 @@ via additionalDirectories: `../gramps`, `../addons-source`, `../addons`.
 
 ## Authoritative conventions — read these, do not re-derive
 - **`../gramps-testbed/CLAUDE.md`** — the Upstream fix workflow section is binding:
-  branch targeting (maintenance/gramps61, not master, for fixes), "edit source never the
+  branch targeting (maintenance/gramps60, not master, for fixes), "edit source never the
   plugin dir", reproduce against example.gramps first, the PR description format, the
   Mantis cross-link syntax, and **Eduard's review gate (you commit and STOP — no
   pushing, no opening PRs, no marking ready unless explicitly instructed)**.
