@@ -26,9 +26,14 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
     - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
     - ./scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
     - ./scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
-  - Windows (host, MSYS2 MINGW64 shell — no Docker; same toolchain as aio/build.sh):
+  - Windows (host, MSYS2 UCRT64 shell — no Docker; same toolchain as aio/build.sh):
     - ./scripts/windows/run-unit.sh — gramps' own *_test.py suite
     - ./scripts/windows/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py
+    - UCRT64 (vs the older MINGW64) is required because MINGW64's
+      Python target triple is rejected by orjson's maturin backend;
+      gramps' own AIO build migrated to UCRT64 in PR #2198 on
+      maintenance/gramps61 (merged 2026-04-19). Windows runs therefore
+      target maintenance/gramps61 + master only (no gramps60).
     - Interface tests (AT-SPI/dogtail) do not port to Windows — Windows
       accessibility is UI Automation, requires a different driver stack
 - Before pushing an addon-source change that touches tests or the addon
@@ -182,7 +187,7 @@ Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
 — the previous "smoke before all else" priority is cleared. Addon-unit suite
 is now scheduled (push/PR/nightly) and invokes tests via dotted path, so
 namespace-package bugs surface in the testbed. Windows unit + addon-unit
-runners (MSYS2 MINGW64) are in place — interface coverage on Windows is
+runners (MSYS2 UCRT64) are in place — interface coverage on Windows is
 still open (AT-SPI/dogtail doesn't port; would need a UIA-based driver).
 No singular next focus yet; natural candidates are expanding interface
 coverage or adding Fedora/Arch/macOS runners.
@@ -204,12 +209,16 @@ coverage or adding Fedora/Arch/macOS runners.
     `actions/setup-python@v5`** — the toolcache interpreter can't see
     apt-installed PyGObject and everything that imports `gi` dies on
     load.
-  - Windows jobs: install `mingw-w64-x86_64-python-gobject` (and the
-    matching gir typelibs) via `msys2/setup-msys2@v2`, then create a
-    `--system-site-packages` venv on `/mingw64/bin/python`. Pacman
-    package list is the trimmed runtime subset of `aio/build.sh` —
-    that script is authoritative; keep the two in sync when AIO's
-    list changes.
+  - Windows jobs: install `mingw-w64-ucrt-x86_64-python-gobject` (and
+    the matching gir typelibs) via `msys2/setup-msys2@v2` with
+    `msystem: UCRT64`, then create a `--system-site-packages` venv on
+    `/ucrt64/bin/python`. Pacman package list is the trimmed runtime
+    subset of `aio/build.sh` on `maintenance/gramps61` — that script
+    is authoritative; keep the two in sync when AIO's list changes
+    (the three `pacman -U` pins on graphviz/gspell/enchant in
+    particular). Matrix is `maintenance/gramps61` + `master`; gramps60
+    is not Windows-tested (UCRT64 + the BSDDB-on-Windows skip landed
+    on gramps61 only).
 - Adding a new Gramps minor: append to `matrix.gramps_ref` in
   unit-tests.yml, interface-tests.yml, and windows-unit-tests.yml
   (keep them in sync).

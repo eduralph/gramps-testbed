@@ -41,10 +41,14 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Mirrors the matrix in unit-tests.yml. Keep these in sync when
-        # new maintenance branches are added.
+        # Windows uses UCRT64 (per #2198); UCRT64 + the BSDDB-on-Windows
+        # skip (#2202) only landed on maintenance/gramps61 and master, so
+        # this matrix diverges from unit-tests.yml (Linux still tests
+        # gramps60). When Windows-eligible gramps minors expand, add
+        # them here.
         gramps_ref:
-          - maintenance/gramps60
+          - maintenance/gramps61
+          - master
 
     defaults:
       run:
@@ -63,54 +67,65 @@ jobs:
           ref: ${{ github.event.inputs.gramps_ref || matrix.gramps_ref }}
           path: gramps
 
-      - name: Set up MSYS2 MINGW64
+      - name: Set up MSYS2 UCRT64
         # Authoritative reference for the install list is the AIO build
-        # script (../gramps/aio/build.sh). This is the trimmed runtime
-        # subset — enough for gramps.gen to import and the *_test.py
-        # suite to run, but not for the AIO build itself (cx_freeze,
-        # NSIS, dictionary tooling are dropped).
+        # script (../gramps/aio/build.sh on maintenance/gramps61). This is
+        # the trimmed runtime subset — enough for gramps.gen to import
+        # and the *_test.py suite to run, but not for the AIO build
+        # itself (cx_freeze, NSIS, dictionary tooling are dropped).
+        # UCRT64 (vs the older MINGW64) is required: MINGW64's Python
+        # interpreter has target triple mingw_x86_64_msvcrt_gnu which
+        # orjson's maturin backend rejects, blocking gramps[testing]
+        # install. UCRT64's ucrt triple resolves orjson on PyPI.
+        # Migrated upstream in gramps PR #2198 (merged 2026-04-19).
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-pip
-            mingw-w64-x86_64-python-gobject
-            mingw-w64-x86_64-python-cairo
-            mingw-w64-x86_64-python-icu
-            mingw-w64-x86_64-python-lxml
-            mingw-w64-x86_64-python-jsonschema
-            mingw-w64-x86_64-python-pillow
-            mingw-w64-x86_64-gtk3
-            mingw-w64-x86_64-osm-gps-map
-            mingw-w64-x86_64-goocanvas
-            mingw-w64-x86_64-gettext
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-python-icu
+            mingw-w64-ucrt-x86_64-python-lxml
+            mingw-w64-ucrt-x86_64-python-jsonschema
+            mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-gexiv2
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-osm-gps-map
+            mingw-w64-ucrt-x86_64-goocanvas
+            mingw-w64-ucrt-x86_64-gettext
             intltool
 
-      - name: Install pinned-URL packages (exiv2, gexiv2)
-        # gexiv2 (and its exiv2 dep) was removed from msys2 main repos,
-        # so aio/build.sh installs it via `pacman -U` from a pinned
-        # repo.msys2.org artifact. Keep these URLs/versions in sync
-        # with aio/build.sh — when AIO bumps them, bump here too.
+      - name: Install pinned-URL packages (graphviz, gspell, enchant)
+        # Mirrors aio/build.sh: the current MSYS2 main-repo versions of
+        # graphviz/gspell/enchant have compatibility regressions
+        # (graphviz breaks pygraphviz; spellcheck breaks on newer
+        # gspell/enchant), so upstream pins them to the 6.0.8-era
+        # versions via `pacman -U` from repo.msys2.org. Keep these URLs
+        # in sync with aio/build.sh — when AIO bumps them, bump here too.
+        # gexiv2/exiv2 are no longer pinned (#2198 moved gexiv2 to the
+        # regular pacman set; exiv2 comes in as a transitive dep).
         run: |
           pacman -U --needed --noconfirm \
-            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst \
-            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-enchant-2.6.7-5-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-graphviz-12.2.1-4-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gspell-1.14.0-4-any.pkg.tar.zst
 
       - name: Set up Python venv (inherits gi/cairo/icu from pacman)
         # Same rationale as the Ubuntu workflow's --system-site-packages
-        # venv: pacman python-gobject installs into /mingw64's site —
+        # venv: pacman python-gobject installs into /ucrt64's site —
         # only visible to that interpreter. Inheriting it via venv keeps
         # `pip install` writes contained while gramps.gen's `import gi`
         # still resolves at test-collection time.
         #
-        # MSYS2 MINGW64 Python uses POSIX-style venv layout (bin/), not
+        # MSYS2 UCRT64 Python uses POSIX-style venv layout (bin/), not
         # Windows-native CPython's Scripts/. Its interpreter ships at
-        # /mingw64/bin/python.exe and venvs it creates follow the same
+        # /ucrt64/bin/python.exe and venvs it creates follow the same
         # convention. Using Scripts/ here would 127 on `not found`.
         run: |
-          /mingw64/bin/python -m venv --system-site-packages .venv
+          /ucrt64/bin/python -m venv --system-site-packages .venv
           echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python -m pip install --upgrade pip
 

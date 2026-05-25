@@ -21,13 +21,13 @@ on:
         default: ''
       gramps_ref:
         description: 'gramps branch/tag/sha'
-        default: 'maintenance/gramps60'
+        default: 'maintenance/gramps61'
       addons_source_repo:
         description: 'addons-source repo (owner/name); empty = same-owner fork'
         default: ''
       addons_ref:
         description: 'addons-source branch/tag/sha'
-        default: 'maintenance/gramps60'
+        default: 'maintenance/gramps61'
 
 permissions:
   contents: read
@@ -57,54 +57,60 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
-          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps60' }}
+          ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps61' }}
           path: gramps
 
       - name: Checkout addons-source fork
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.addons_source_repo || vars.ADDONS_SOURCE_REPO || format('{0}/addons-source', github.repository_owner) }}
-          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
+          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps61' }}
           path: addons-source
 
-      - name: Set up MSYS2 MINGW64
+      - name: Set up MSYS2 UCRT64
         # Kept in sync with windows-unit-tests.yml. Authoritative
-        # reference is ../gramps/aio/build.sh.
+        # reference is ../gramps/aio/build.sh on maintenance/gramps61.
+        # UCRT64 (vs MINGW64) is required so that orjson resolves under
+        # `pip install -e gramps[testing]`; see windows-unit-tests.yml
+        # for the longer rationale and the upstream #2198 link.
         uses: msys2/setup-msys2@v2
         with:
-          msystem: MINGW64
+          msystem: UCRT64
           update: true
           install: >-
-            mingw-w64-x86_64-python
-            mingw-w64-x86_64-python-pip
-            mingw-w64-x86_64-python-gobject
-            mingw-w64-x86_64-python-cairo
-            mingw-w64-x86_64-python-icu
-            mingw-w64-x86_64-python-lxml
-            mingw-w64-x86_64-python-jsonschema
-            mingw-w64-x86_64-python-pillow
-            mingw-w64-x86_64-gtk3
-            mingw-w64-x86_64-osm-gps-map
-            mingw-w64-x86_64-goocanvas
-            mingw-w64-x86_64-gettext
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-python-icu
+            mingw-w64-ucrt-x86_64-python-lxml
+            mingw-w64-ucrt-x86_64-python-jsonschema
+            mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-gexiv2
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-osm-gps-map
+            mingw-w64-ucrt-x86_64-goocanvas
+            mingw-w64-ucrt-x86_64-gettext
             intltool
 
-      - name: Install pinned-URL packages (exiv2, gexiv2)
-        # gexiv2 (and its exiv2 dep) was removed from msys2 main repos,
-        # so aio/build.sh installs it via `pacman -U` from a pinned
-        # repo.msys2.org artifact. Keep these URLs/versions in sync
-        # with aio/build.sh — when AIO bumps them, bump here too.
+      - name: Install pinned-URL packages (graphviz, gspell, enchant)
+        # Mirrors aio/build.sh — the current main-repo versions of
+        # graphviz/gspell/enchant break pygraphviz/spellcheck, so
+        # upstream pins the 6.0.8-era versions via `pacman -U`. Keep in
+        # sync with aio/build.sh. See windows-unit-tests.yml for the
+        # longer rationale.
         run: |
           pacman -U --needed --noconfirm \
-            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst \
-            https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-enchant-2.6.7-5-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-graphviz-12.2.1-4-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gspell-1.14.0-4-any.pkg.tar.zst
 
       - name: Set up Python venv (inherits gi/cairo/icu from pacman)
-        # MSYS2 MINGW64 Python uses POSIX-style venv layout (bin/), not
+        # MSYS2 UCRT64 Python uses POSIX-style venv layout (bin/), not
         # Windows-native CPython's Scripts/ — see windows-unit-tests.yml
         # for the longer rationale.
         run: |
-          /mingw64/bin/python -m venv --system-site-packages .venv
+          /ucrt64/bin/python -m venv --system-site-packages .venv
           echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin" >> "$GITHUB_PATH"
           .venv/bin/python -m pip install --upgrade pip
 

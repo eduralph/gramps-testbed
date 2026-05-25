@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run per-addon unit test suites (addons-source/<addon>/tests/test_*.py
-# and test_windows_*.py) on Windows under MSYS2 MINGW64. No display,
+# and test_windows_*.py) on Windows under MSYS2 UCRT64. No display,
 # no AT-SPI — these tests construct in-memory fixtures and/or exercise
 # pure-logic helpers from the addon.
 #
@@ -12,6 +12,9 @@
 #   test_windows_*.py      Windows-only — runs here
 #   test_integration_*.py  Linux-only, full-pipeline — skipped here
 #
+# UCRT64 (vs MINGW64): required for orjson — see run-unit.sh for the
+# longer rationale and the upstream #2198 reference.
+#
 # Usage:
 #   ./scripts/windows/run-addon-unit.sh                  # all addons with tests/
 #   ./scripts/windows/run-addon-unit.sh TMGimporter      # one addon
@@ -19,9 +22,9 @@
 
 set -euo pipefail
 
-if [[ "${MSYSTEM:-}" != "MINGW64" ]]; then
-  echo "× This script must be run from the MSYS2 MINGW64 shell (MSYSTEM=MINGW64)." >&2
-  echo "  Open 'MSYS2 MINGW64' from the Start menu and re-run." >&2
+if [[ "${MSYSTEM:-}" != "UCRT64" ]]; then
+  echo "× This script must be run from the MSYS2 UCRT64 shell (MSYSTEM=UCRT64)." >&2
+  echo "  Open 'MSYS2 UCRT64' from the Start menu and re-run." >&2
   exit 1
 fi
 
@@ -34,29 +37,32 @@ if [[ ! -d "$WORKSPACE/addons-source" ]]; then
 fi
 
 # Pacman package list — kept in sync with scripts/windows/run-unit.sh.
-# Authoritative reference is aio/build.sh; this is the trimmed runtime
-# subset (no cx_freeze / NSIS / dictionary tooling).
+# Authoritative reference is aio/build.sh on maintenance/gramps61; this
+# is the trimmed runtime subset (no cx_freeze / NSIS / dictionary
+# tooling).
 PACMAN_PKGS=(
-  mingw-w64-x86_64-python
-  mingw-w64-x86_64-python-pip
-  mingw-w64-x86_64-python-gobject
-  mingw-w64-x86_64-python-cairo
-  mingw-w64-x86_64-python-icu
-  mingw-w64-x86_64-python-lxml
-  mingw-w64-x86_64-python-jsonschema
-  mingw-w64-x86_64-python-pillow
-  mingw-w64-x86_64-gtk3
-  mingw-w64-x86_64-osm-gps-map
-  mingw-w64-x86_64-goocanvas
-  mingw-w64-x86_64-gettext
+  mingw-w64-ucrt-x86_64-python
+  mingw-w64-ucrt-x86_64-python-pip
+  mingw-w64-ucrt-x86_64-python-gobject
+  mingw-w64-ucrt-x86_64-python-cairo
+  mingw-w64-ucrt-x86_64-python-icu
+  mingw-w64-ucrt-x86_64-python-lxml
+  mingw-w64-ucrt-x86_64-python-jsonschema
+  mingw-w64-ucrt-x86_64-python-pillow
+  mingw-w64-ucrt-x86_64-gexiv2
+  mingw-w64-ucrt-x86_64-gtk3
+  mingw-w64-ucrt-x86_64-osm-gps-map
+  mingw-w64-ucrt-x86_64-goocanvas
+  mingw-w64-ucrt-x86_64-gettext
   intltool
 )
 
 # Pinned-URL packages — see scripts/windows/run-unit.sh for rationale.
 # Kept in sync with aio/build.sh.
 PACMAN_URL_PKGS=(
-  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst
-  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-enchant-2.6.7-5-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-graphviz-12.2.1-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gspell-1.14.0-4-any.pkg.tar.zst
 )
 
 echo "→ ensuring MSYS2 packages are installed"
@@ -66,9 +72,9 @@ pacman -U --needed --noconfirm "${PACMAN_URL_PKGS[@]}"
 VENV="$WORKSPACE/.venv-windows"
 if [[ ! -d "$VENV" ]]; then
   echo "→ creating venv at $VENV"
-  /mingw64/bin/python -m venv --system-site-packages "$VENV"
+  /ucrt64/bin/python -m venv --system-site-packages "$VENV"
 fi
-# MSYS2 MINGW64 Python uses POSIX venv layout (bin/), not Windows
+# MSYS2 UCRT64 Python uses POSIX venv layout (bin/), not Windows
 # CPython's Scripts/ — see windows-unit-tests.yml for rationale.
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
@@ -169,7 +175,7 @@ fi
 
 echo "→ addon unit tests: ${addons[*]}"
 
-# GRAMPS_RESOURCES needs a Windows path because /mingw64/bin/python is
+# GRAMPS_RESOURCES needs a Windows path because /ucrt64/bin/python is
 # Windows-native and does not understand POSIX-style /c/... paths.
 GRAMPS_RESOURCES_WIN="$(cygpath -w "$WORKSPACE/gramps")"
 

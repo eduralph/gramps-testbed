@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Run gramps' own unit test suite (*_test.py under gramps/**/test/) on
-# Windows under MSYS2 MINGW64. No display, no AT-SPI — unit tests
+# Windows under MSYS2 UCRT64. No display, no AT-SPI — unit tests
 # construct in-memory fixtures only.
 #
 # Companion to scripts/windows/run-addon-unit.sh. The Windows runners
@@ -8,9 +8,15 @@
 # the AIO build chain Gramps already uses is MSYS2 — there is no Docker
 # image equivalent for the Windows side of the testbed.
 #
+# UCRT64 (vs the older MINGW64) is required: MINGW64's Python target
+# triple `mingw_x86_64_msvcrt_gnu` is rejected by orjson's maturin
+# backend, blocking `pip install -e gramps[testing]`. UCRT64's `ucrt`
+# triple resolves orjson on PyPI. Migrated upstream by gramps PR #2198
+# (merged on maintenance/gramps61 2026-04-19).
+#
 # Prerequisites:
 #   - MSYS2 installed (https://www.msys2.org/), and this script invoked
-#     from the "MSYS2 MINGW64" shell ($MSYSTEM == MINGW64).
+#     from the "MSYS2 UCRT64" shell ($MSYSTEM == UCRT64).
 #   - The pacman package list below is auto-installed via
 #     `pacman -S --needed --noconfirm`; safe to re-run.
 #
@@ -19,9 +25,9 @@
 
 set -euo pipefail
 
-if [[ "${MSYSTEM:-}" != "MINGW64" ]]; then
-  echo "× This script must be run from the MSYS2 MINGW64 shell (MSYSTEM=MINGW64)." >&2
-  echo "  Open 'MSYS2 MINGW64' from the Start menu and re-run." >&2
+if [[ "${MSYSTEM:-}" != "UCRT64" ]]; then
+  echo "× This script must be run from the MSYS2 UCRT64 shell (MSYSTEM=UCRT64)." >&2
+  echo "  Open 'MSYS2 UCRT64' from the Start menu and re-run." >&2
   exit 1
 fi
 
@@ -34,28 +40,33 @@ cd "$WORKSPACE"
 # trimmed view that drops the cx_freeze / NSIS / dictionary tooling
 # the runtime tests do not exercise.
 PACMAN_PKGS=(
-  mingw-w64-x86_64-python
-  mingw-w64-x86_64-python-pip
-  mingw-w64-x86_64-python-gobject
-  mingw-w64-x86_64-python-cairo
-  mingw-w64-x86_64-python-icu
-  mingw-w64-x86_64-python-lxml
-  mingw-w64-x86_64-python-jsonschema
-  mingw-w64-x86_64-python-pillow
-  mingw-w64-x86_64-gtk3
-  mingw-w64-x86_64-osm-gps-map
-  mingw-w64-x86_64-goocanvas
-  mingw-w64-x86_64-gettext
+  mingw-w64-ucrt-x86_64-python
+  mingw-w64-ucrt-x86_64-python-pip
+  mingw-w64-ucrt-x86_64-python-gobject
+  mingw-w64-ucrt-x86_64-python-cairo
+  mingw-w64-ucrt-x86_64-python-icu
+  mingw-w64-ucrt-x86_64-python-lxml
+  mingw-w64-ucrt-x86_64-python-jsonschema
+  mingw-w64-ucrt-x86_64-python-pillow
+  mingw-w64-ucrt-x86_64-gexiv2
+  mingw-w64-ucrt-x86_64-gtk3
+  mingw-w64-ucrt-x86_64-osm-gps-map
+  mingw-w64-ucrt-x86_64-goocanvas
+  mingw-w64-ucrt-x86_64-gettext
   intltool
 )
 
-# Pinned-URL packages — exiv2 and gexiv2 were removed from msys2 main
-# repos, so aio/build.sh installs them via `pacman -U` from
-# repo.msys2.org artifacts. Keep these URLs in sync with aio/build.sh
-# when AIO bumps the versions.
+# Pinned-URL packages — graphviz/gspell/enchant ship newer versions in
+# the MSYS2 main repos that break pygraphviz and spellcheck, so
+# aio/build.sh pins the 6.0.8-era artefacts via `pacman -U` from
+# repo.msys2.org. Keep these URLs in sync with aio/build.sh when AIO
+# bumps the versions. (gexiv2 is no longer pinned post-#2198 — it now
+# comes from the regular UCRT64 install set, with exiv2 as a
+# transitive dep.)
 PACMAN_URL_PKGS=(
-  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-exiv2-0.27.7-4-any.pkg.tar.zst
-  https://repo.msys2.org/mingw/mingw64/mingw-w64-x86_64-gexiv2-0.14.6-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-enchant-2.6.7-5-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-graphviz-12.2.1-4-any.pkg.tar.zst
+  https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gspell-1.14.0-4-any.pkg.tar.zst
 )
 
 echo "→ ensuring MSYS2 packages are installed"
@@ -69,9 +80,9 @@ pacman -U --needed --noconfirm "${PACMAN_URL_PKGS[@]}"
 VENV="$WORKSPACE/.venv-windows"
 if [[ ! -d "$VENV" ]]; then
   echo "→ creating venv at $VENV"
-  /mingw64/bin/python -m venv --system-site-packages "$VENV"
+  /ucrt64/bin/python -m venv --system-site-packages "$VENV"
 fi
-# MSYS2 MINGW64 Python uses POSIX venv layout (bin/), not Windows
+# MSYS2 UCRT64 Python uses POSIX venv layout (bin/), not Windows
 # CPython's Scripts/ — see windows-unit-tests.yml for rationale.
 # shellcheck disable=SC1091
 source "$VENV/bin/activate"
@@ -103,7 +114,7 @@ mkdir -p "$RESULTS_DIR"
 # Mirrors the canonical command from ../gramps/AGENTS.md:
 #   GRAMPS_RESOURCES=. python3 -m unittest discover -p "*_test.py"
 # xmlrunner is a drop-in replacement that writes JUnit XML. cygpath -w
-# is required because /mingw64/bin/python is a Windows-native binary —
+# is required because /ucrt64/bin/python is a Windows-native binary —
 # POSIX-style paths from MSYS2 bash are not understood by Python's os
 # layer when handed in via env or argv.
 cd "$WORKSPACE/gramps"
