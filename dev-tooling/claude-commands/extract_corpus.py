@@ -33,6 +33,9 @@ STATUS_PATTERNS = [
     (r"\bwont[- ]?fix\b|will not fix", "wontfix"),
     (r"\binvalid\b|invalid input|not a bug", "invalid"),
     (r"\bduplicate\b", "duplicate"),
+    (r"addon deleted|delete the addon|deleted;|not ported|removed per", "deletion"),
+    (r"\bmerged\b|merged via|merged to", "merged"),
+    (r"verification only|verified\b", "verified"),
     (r"\bfixed\b", "fixed"),   # generic 'fixed' last so the specific ones win
 ]
 
@@ -123,19 +126,45 @@ def parse_diff(diff_text):
 def issue_id_from_dir(dirname):
     base = os.path.basename(dirname.rstrip("/"))
     m = re.match(r"issue[_-](.+)", base)
-    return m.group(1) if m else base
+    return m.group(1) if m else base   # non-issue_ dirs (enhancement_*) keep their full name
+
+def batch_from_dir(issue_dir):
+    # .../triage/batches/<BATCH>/results/<issue> → grab <BATCH>
+    parts = os.path.normpath(issue_dir).split(os.sep)
+    try:
+        return parts[parts.index("results") - 1]
+    except (ValueError, IndexError):
+        return None
 
 def extract_issue(issue_dir):
-    summary = read(os.path.join(issue_dir, "SUMMARY.md"))
+    summary_path = os.path.join(issue_dir, "SUMMARY.md")
+    summary = read(summary_path)
     diff = read(os.path.join(issue_dir, "patch.diff"))
+    has_summary = os.path.exists(summary_path)
     status, status_line = parse_status(summary)
-    repo, branch = parse_repo_branch(summary)
     diff_facts = parse_diff(diff)
+    # Honest handling when there's no SUMMARY: don't emit null. Infer what we can,
+    # and flag for the BATCH_INDEX fallback (wired in main()).
+    # TODO(batch-index-fallback): ~11 result dirs across batches have no SUMMARY.md.
+    #   They're labeled fixed-no-summary (patch present) or no-result (empty) here, which
+    #   is honest but coarse. Each batch has a BATCH_INDEX.md that likely records the real
+    #   per-issue outcome (cant-repro/wontfix/etc). To upgrade: parse <batch>/BATCH_INDEX.md
+    #   once in main(), build {issue_id: status}, and override here when status == no-result.
+    #   Deferred: rule-mining keys off PATCHED issues, which nearly all HAVE summaries, so the
+    #   no-summary set rarely affects the backlog. Wire only if per-issue precision is needed.
+    if not has_summary:
+        if diff_facts["present"]:
+            status, status_line = "fixed-no-summary", "patch present, no SUMMARY.md"
+        else:
+            status, status_line = "no-result", "empty result dir (no SUMMARY, no patch)"
+    repo, branch = parse_repo_branch(summary)
     has_mantis = os.path.exists(os.path.join(issue_dir, "mantis-comment.md"))
     has_pr = os.path.exists(os.path.join(issue_dir, "pr-description.md"))
     return {
         "issue": issue_id_from_dir(issue_dir),
+        "batch": batch_from_dir(issue_dir),
         "dir": issue_dir,
+        "has_summary": has_summary,
         "status": status,
         "status_line": status_line,
         "repo": repo,
@@ -159,10 +188,14 @@ def main():
     roots = args.roots or ["triage/batches"]
     issue_dirs = []
     for root in roots:
-        # find every results/issue_*/ under the root(s), any depth
-        issue_dirs += glob.glob(os.path.join(root, "**", "results", "issue_*"), recursive=True)
-        issue_dirs += glob.glob(os.path.join(root, "**", "results", "issue-*"), recursive=True)
-    issue_dirs = sorted(set(d for d in issue_dirs if os.path.isdir(d)))
+        # every per-issue result dir, any depth. Match ALL result subdirs (issue_*, issue-*,
+        # and non-issue names like enhancement_*), then exclude the stray top-level
+        # results/SUMMARY.md and any non-dir. Keyed on full path so the same issue worked in
+        # two batches (e.g. 13736 in batch-02 AND batch-03) yields TWO records, not one.
+        for d in glob.glob(os.path.join(root, "**", "results", "*"), recursive=True):
+            if os.path.isdir(d):
+                issue_dirs.append(d)
+    issue_dirs = sorted(set(issue_dirs))   # full-path dedup; cross-batch dupes preserved
 
     records = [extract_issue(d) for d in issue_dirs]
 
