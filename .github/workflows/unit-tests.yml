@@ -29,6 +29,7 @@ permissions:
 
 jobs:
   unit-tests:
+    name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Advisory gate. This job runs gramps' own *_test.py suite against an
@@ -156,6 +157,6 @@ jobs:
           # checkouts use `path:` subdirs so the workflow root isn't a
           # git repo; anchor on the testbed checkout.
           working-directory: gramps-testbed
-          name: Unit Tests (${{ matrix.gramps_ref }})
+          name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit

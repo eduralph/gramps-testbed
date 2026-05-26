@@ -39,6 +39,7 @@ permissions:
 
 jobs:
   addon-unit-tests:
+    name: '[upstream] Addon Unit Tests'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     # Advisory gate. Addon tests run upstream addon code, so failures
@@ -278,6 +279,6 @@ jobs:
           # checkouts use `path:` subdirs so the workflow root isn't a
           # git repo; anchor on the testbed checkout.
           working-directory: gramps-testbed
-          name: Addon Unit Tests
+          name: '[upstream] Addon Unit Tests'
           path: test-results/**/*.xml
           reporter: java-junit

@@ -21,10 +21,21 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
 ## Conventions
 - All tests use stdlib unittest.TestCase (contributable upstream; gramps
   itself uses unittest, so pytest is not introduced anywhere in the testbed)
-- Local runs (Ubuntu/Linux), containerised, mirrors CI:
-  - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
-  - ./scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
-  - ./scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
+- Local runs, mirrors CI:
+  - Ubuntu (containerised, Docker):
+    - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
+    - ./scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
+    - ./scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
+  - Windows (host, MSYS2 UCRT64 shell — no Docker; same toolchain as aio/build.sh):
+    - ./scripts/windows/run-unit.sh — gramps' own *_test.py suite
+    - ./scripts/windows/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py
+    - UCRT64 (vs the older MINGW64) is required because MINGW64's
+      Python target triple is rejected by orjson's maturin backend;
+      gramps' own AIO build migrated to UCRT64 in PR #2198 on
+      maintenance/gramps61 (merged 2026-04-19). Windows runs therefore
+      target maintenance/gramps61 + master only (no gramps60).
+    - Interface tests (AT-SPI/dogtail) do not port to Windows — Windows
+      accessibility is UI Automation, requires a different driver stack
 - Before pushing an addon-source change that touches tests or the addon
   module itself, run `./scripts/ubuntu/run-addon-unit.sh <AddonName>` on
   the PR branch. The runner loads each test via its dotted path
@@ -33,19 +44,19 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   `discover`-from-tests/ hides. Bug 0012691 was exactly this class of
   bug: `from <Addon> import <Addon>` bound the submodule instead of the
   class under dotted-path loading.
-- Platform-specific scripts live under ./scripts/<platform>/; today only
-  scripts/ubuntu/ exists (Fedora/Arch/macOS/Windows equivalents are planned)
+- Platform-specific scripts live under ./scripts/<platform>/; today
+  scripts/ubuntu/ and scripts/windows/ exist (Fedora/Arch/macOS
+  equivalents are planned)
 - Addon test filename convention (mirrors addons-source/.github/workflows/ci.yml):
   - `test_*.py` — general, runs on every platform
   - `test_linux_*.py` — Linux-only
   - `test_windows_*.py` — Windows-only
   - `test_integration_*.py` — Linux-only, full-pipeline/DB-backed
-  Each platform's `run-addon-unit.sh` (and the corresponding CI job) filters
-  out the prefixes that don't match its OS. The Ubuntu runner skips
-  `test_windows_*` and runs everything else; a future `scripts/windows/`
-  runner would do the inverse. Until a Windows image/runner exists in the
-  testbed, `test_windows_*.py` runs nowhere here — Windows coverage lives
-  in addons-source's own Windows CI job.
+  Each platform's `run-addon-unit.sh` (and the corresponding CI job)
+  filters out the prefixes that don't match its OS. The Ubuntu runner
+  skips `test_windows_*`; the Windows runner skips both `test_linux_*`
+  and `test_integration_*`. Both runners include the platform-neutral
+  `test_*.py` files.
 - Docker image: gramps-testbed:ubuntu-<gramps-version> (e.g. gramps-testbed:ubuntu-6.1.0),
   built from docker/Dockerfile.ubuntu; version is auto-read from gramps/version.py
   by the wrapper scripts so different Gramps versions get different tags
@@ -203,9 +214,11 @@ mean an issue here — not GitHub. Wiki references:
 Interface smoke suite (tests/interface/test_smoke.py) passes locally and in CI
 — the previous "smoke before all else" priority is cleared. Addon-unit suite
 is now scheduled (push/PR/nightly) and invokes tests via dotted path, so
-namespace-package bugs surface in the testbed. No singular next focus yet;
-natural candidates are expanding interface coverage or porting scripts to
-other platforms.
+namespace-package bugs surface in the testbed. Windows unit + addon-unit
+runners (MSYS2 UCRT64) are in place — interface coverage on Windows is
+still open (AT-SPI/dogtail doesn't port; would need a UIA-based driver).
+No singular next focus yet; natural candidates are expanding interface
+coverage or adding Fedora/Arch/macOS runners.
 
 ## CI gates and branch protection
 - `main` is protected by ruleset "main branch protection" (id 15262402):
@@ -218,14 +231,46 @@ other platforms.
   and Docker Image Build additionally set `continue-on-error: true` at
   job level so their workflow conclusion stays green even when the job
   check-run is red. Interface Tests runs visibly but doesn't block.
-- Python env in CI: install `python3-gi`/`python3-pyatspi` via apt and
-  create a `--system-site-packages` venv. **Do not switch to
-  `actions/setup-python@v5`** — the toolcache interpreter can't see
-  apt-installed PyGObject and everything that imports `gi` dies on load.
+- Check-run ownership tags: every entry in the PR Checks UI is
+  prefixed with `[upstream]` or `[testbed]` so the source of a red is
+  visible at a glance. The prefix is applied in two places per workflow
+  so BOTH lines in the checks list (the GitHub-Actions job conclusion
+  and the dorny/test-reporter published check-run) carry it:
+  - `jobs.<job_id>.name:` — overrides the job's display name (which
+    would otherwise be the job ID, e.g. `windows-unit-tests`).
+  - The `dorny/test-reporter` step's `name:` field.
+  Both are set to the same string for visual consistency.
+  `[upstream]` = the job runs gramps' own *_test.py or per-addon test
+  suites (failures are usually advisory, reflecting upstream regressions
+  or addon content). `[testbed]` = the job runs testbed-owned test
+  files (anything under this repo's `tests/`) — reds there are more
+  likely to be real regressions worth fixing.
+  Note: `[testbed] Interface Tests` also picks up
+  `tests/test_addon_po_catalogs.py` which checks addon PO catalogs, so
+  failures there can still be upstream-content driven — look at the
+  failing test name to decide.
+- Python env in CI:
+  - Linux jobs: install `python3-gi`/`python3-pyatspi` via apt and
+    create a `--system-site-packages` venv. **Do not switch to
+    `actions/setup-python@v5`** — the toolcache interpreter can't see
+    apt-installed PyGObject and everything that imports `gi` dies on
+    load.
+  - Windows jobs: install `mingw-w64-ucrt-x86_64-python-gobject` (and
+    the matching gir typelibs) via `msys2/setup-msys2@v2` with
+    `msystem: UCRT64`, then create a `--system-site-packages` venv on
+    `/ucrt64/bin/python`. Pacman package list is the trimmed runtime
+    subset of `aio/build.sh` on `maintenance/gramps61` — that script
+    is authoritative; keep the two in sync when AIO's list changes
+    (the three `pacman -U` pins on graphviz/gspell/enchant in
+    particular). Matrix is `maintenance/gramps61` + `master`; gramps60
+    is not Windows-tested (UCRT64 + the BSDDB-on-Windows skip landed
+    on gramps61 only).
 - Adding a new Gramps minor: append to `matrix.gramps_ref` in
-  unit-tests.yml and interface-tests.yml (keep them in sync).
-- Nightly drift crons fire 1-2.5h after upstream-sync (04:00 UTC): unit
-  tests 05:00, interface tests 05:30, docker build 06:00, addon unit
-  tests 06:30.
+  unit-tests.yml, interface-tests.yml, and windows-unit-tests.yml
+  (keep them in sync).
+- Nightly drift crons fire 1-2.75h after upstream-sync (04:00 UTC):
+  unit tests 05:00, windows unit tests 05:15, interface tests 05:30,
+  docker build 06:00, addon unit tests 06:30, windows addon unit
+  tests 06:45.
 - `eduralph/gramps` and `eduralph/addons-source` carry a parallel
   "PRFirst" ruleset on `master` + `maintenance/gramps60` (no bypass).

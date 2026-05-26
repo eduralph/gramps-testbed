@@ -1,0 +1,244 @@
+name: Windows Unit Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    # Nightly drift check at 05:15 UTC — staggered 15min after the
+    # Linux unit-tests cron (05:00) so the two runners do not contend
+    # for the same upstream resources or notification slots. Surfaces
+    # upstream regressions that only manifest on the Windows side
+    # (MSYS2 packaging shifts, Win-specific gi typelib changes).
+    - cron: '15 5 * * *'
+  workflow_dispatch:
+    inputs:
+      gramps_repo:
+        description: 'gramps repo (owner/name); empty = same-owner fork'
+        default: ''
+      gramps_ref:
+        description: 'gramps branch/tag/sha; empty = matrix defaults'
+        default: ''
+
+# See interface-tests.yml for rationale — dorny/test-reporter needs
+# checks: write + pull-requests: write.
+permissions:
+  contents: read
+  checks: write
+  pull-requests: write
+
+jobs:
+  windows-unit-tests:
+    name: '[upstream] Windows Unit Tests (${{ matrix.gramps_ref }})'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    # Advisory gate. Same rationale as unit-tests.yml: this job runs
+    # gramps' own *_test.py suite against an upstream gramps checkout,
+    # so failures here almost always reflect upstream regressions or
+    # MSYS2 packaging drift, not testbed bugs. continue-on-error lets
+    # testbed PRs merge on upstream-caused red.
+    continue-on-error: true
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # Windows uses UCRT64 (per #2198); UCRT64 + the BSDDB-on-Windows
+        # skip (#2202) only landed on maintenance/gramps61 and master, so
+        # this matrix diverges from unit-tests.yml (Linux still tests
+        # gramps60). When Windows-eligible gramps minors expand, add
+        # them here.
+        gramps_ref:
+          - maintenance/gramps61
+          - master
+
+    defaults:
+      run:
+        shell: msys2 {0}
+
+    steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      - name: Checkout gramps fork
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.gramps_repo || vars.GRAMPS_REPO || format('{0}/gramps', github.repository_owner) }}
+          ref: ${{ github.event.inputs.gramps_ref || matrix.gramps_ref }}
+          path: gramps
+
+      - name: Set up MSYS2 UCRT64
+        # Authoritative reference for the install list is the AIO build
+        # script (../gramps/aio/build.sh on maintenance/gramps61). This is
+        # the trimmed runtime subset — enough for gramps.gen to import
+        # and the *_test.py suite to run, but not for the AIO build
+        # itself (cx_freeze, NSIS, dictionary tooling are dropped).
+        # UCRT64 (vs the older MINGW64) is required: MINGW64's Python
+        # interpreter has target triple mingw_x86_64_msvcrt_gnu which
+        # orjson's maturin backend rejects, blocking gramps[testing]
+        # install. UCRT64's ucrt triple resolves orjson on PyPI.
+        # Migrated upstream in gramps PR #2198 (merged 2026-04-19).
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: UCRT64
+          update: true
+          install: >-
+            mingw-w64-ucrt-x86_64-python
+            mingw-w64-ucrt-x86_64-python-pip
+            mingw-w64-ucrt-x86_64-python-gobject
+            mingw-w64-ucrt-x86_64-python-cairo
+            mingw-w64-ucrt-x86_64-python-icu
+            mingw-w64-ucrt-x86_64-python-lxml
+            mingw-w64-ucrt-x86_64-python-jsonschema
+            mingw-w64-ucrt-x86_64-python-pillow
+            mingw-w64-ucrt-x86_64-python-maturin
+            mingw-w64-ucrt-x86_64-rust
+            mingw-w64-ucrt-x86_64-gexiv2
+            mingw-w64-ucrt-x86_64-gtk3
+            mingw-w64-ucrt-x86_64-osm-gps-map
+            mingw-w64-ucrt-x86_64-goocanvas
+            mingw-w64-ucrt-x86_64-gettext
+            intltool
+
+      - name: Install pinned-URL packages (graphviz, gspell, enchant)
+        # Mirrors aio/build.sh: the current MSYS2 main-repo versions of
+        # graphviz/gspell/enchant have compatibility regressions
+        # (graphviz breaks pygraphviz; spellcheck breaks on newer
+        # gspell/enchant), so upstream pins them to the 6.0.8-era
+        # versions via `pacman -U` from repo.msys2.org. Keep these URLs
+        # in sync with aio/build.sh — when AIO bumps them, bump here too.
+        # gexiv2/exiv2 are no longer pinned (#2198 moved gexiv2 to the
+        # regular pacman set; exiv2 comes in as a transitive dep).
+        run: |
+          pacman -U --needed --noconfirm \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-enchant-2.6.7-5-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-graphviz-12.2.1-4-any.pkg.tar.zst \
+            https://repo.msys2.org/mingw/ucrt64/mingw-w64-ucrt-x86_64-gspell-1.14.0-4-any.pkg.tar.zst
+
+      - name: Set up Python venv (inherits gi/cairo/icu from pacman)
+        # Same rationale as the Ubuntu workflow's --system-site-packages
+        # venv: pacman python-gobject installs into /ucrt64's site —
+        # only visible to that interpreter. Inheriting it via venv keeps
+        # `pip install` writes contained while gramps.gen's `import gi`
+        # still resolves at test-collection time.
+        #
+        # MSYS2 UCRT64 Python uses POSIX-style venv layout (bin/), not
+        # Windows-native CPython's Scripts/. Its interpreter ships at
+        # /ucrt64/bin/python.exe and venvs it creates follow the same
+        # convention. Using Scripts/ here would 127 on `not found`.
+        run: |
+          /ucrt64/bin/python -m venv --system-site-packages .venv
+          echo "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin" >> "$GITHUB_PATH"
+          .venv/bin/python -m pip install --upgrade pip
+
+      - name: Restore pip cache
+        # actions/cache scopes the key by runner.os automatically
+        # (Linux vs. Windows do not collide on the same key).
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-${{ runner.os }}-${{ hashFiles('gramps-testbed/requirements-test.txt') }}
+          restore-keys: |
+            pip-${{ runner.os }}-
+
+      - name: Install Python dependencies
+        # `source .venv/bin/activate` is required (not just $GITHUB_PATH
+        # from the venv-setup step): with `shell: msys2 {0}`, each step
+        # gets a fresh msys2 bash whose PATH inherits from setup-msys2's
+        # mingw context, not from the GITHUB_PATH prepend. UCRT64's
+        # Python 3.14 ships PEP 668's EXTERNALLY-MANAGED marker, so any
+        # bare `pip` call resolves to /ucrt64/bin/pip and refuses to
+        # install. (Under MINGW64 this was a latent bug — the older
+        # Python had no marker, so pip silently installed into the
+        # wrong site-packages.) Activating the venv routes pip/python
+        # through .venv/bin and bypasses PEP 668 (venvs aren't marked).
+        #
+        # orjson source build on UCRT64 Python 3.14 — bespoke chain
+        # ------------------------------------------------------------
+        # orjson has no PyPI wheel for the MSYS2 UCRT64 Python tag
+        # (mingw_x86_64_ucrt_llvm). pip falls back to source build via
+        # maturin. maturin's PyPI source build ALSO has no UCRT64 cp314
+        # wheel and ITS source build fails at metadata generation under
+        # cp314. So pip's default isolated build is a dead end.
+        #
+        # The escape: MSYS2 itself packages a working maturin for UCRT64
+        # (`mingw-w64-ucrt-x86_64-python-maturin`, built against the
+        # MSYS2 Python ABI). Installed via pacman above, it lives in
+        # /ucrt64/.../site-packages and is visible from the venv (which
+        # is --system-site-packages). With `--no-build-isolation`, pip
+        # uses THAT maturin to build orjson instead of trying to source-
+        # build its own.
+        #
+        # orjson version is pinned to 3.11.7 to mirror aio/build.sh:83
+        # on maintenance/gramps61 (Steve Youngs, commit 3d99a8d9,
+        # 2026-04-23). When upstream bumps the orjson pin, bump here.
+        #
+        # DELETE-WHEN: MSYS2 ships a cp314 wheel for orjson on UCRT64
+        # (so pip wheel-matching resolves directly). At that point this
+        # whole no-build-isolation dance can collapse back to a plain
+        # `pip install -e gramps[testing]`.
+        run: |
+          source .venv/bin/activate
+          # Sanity: the pacman-installed maturin is importable in the venv.
+          maturin --version
+          python -c "import maturin; print('maturin', maturin.__file__)"
+          # --no-build-isolation makes pip use the venv's (pacman-supplied)
+          # maturin instead of trying to source-build its own.
+          pip install --no-build-isolation --upgrade 'orjson==3.11.7'
+          # Smoke-test orjson now, before gramps install — a Rust ext can
+          # link against the wrong ABI and segfault on import. Catch that
+          # here, not 8 minutes into a test run.
+          python -c "import orjson; print(orjson.__version__); print(orjson.dumps({'x':1})); print(orjson.loads(b'{\"y\":2}'))"
+          pip install -r gramps-testbed/requirements-test.txt
+          # [testing] extras pulls in jsonschema/mock/lxml from gramps
+          # setup.py, which some of gramps' own *_test.py files import.
+          pip install -e 'gramps[testing]'
+          # Confirm the module that triggered the original collection
+          # failure now loads (gramps.gen.lib.json_utils imports orjson
+          # unconditionally at module load).
+          python -c "import gramps.gen.lib.json_utils"
+
+      - name: Compile Gramps translations
+        working-directory: gramps
+        run: |
+          for po in po/*.po; do
+            lang=$(basename "$po" .po)
+            dest="build/mo/$lang/LC_MESSAGES"
+            mkdir -p "$dest"
+            msgfmt "$po" -o "$dest/gramps.mo"
+          done
+
+      - name: Run unit tests
+        # Mirrors scripts/windows/run-unit.sh. cygpath -w converts the
+        # POSIX results path back to a Windows path so the MSYS2-native
+        # Python interpreter writes to the location the next step (and
+        # actions/upload-artifact) can find. `source .venv/bin/activate`
+        # — see Install Python dependencies for the rationale.
+        working-directory: gramps
+        env:
+          GRAMPS_RESOURCES: .
+        run: |
+          source "$(cygpath -u "$GITHUB_WORKSPACE")/.venv/bin/activate"
+          ws_posix="$(cygpath -u "$GITHUB_WORKSPACE")"
+          mkdir -p "$ws_posix/gramps-testbed/test-results"
+          python -m xmlrunner discover \
+            -p '*_test.py' \
+            -o "$(cygpath -w "$ws_posix/gramps-testbed/test-results")" \
+            -v
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-unit-test-results-${{ strategy.job-index }}
+          path: gramps-testbed/test-results/
+
+      - name: Publish test report
+        if: always()
+        uses: dorny/test-reporter@v1
+        with:
+          working-directory: gramps-testbed
+          name: '[upstream] Windows Unit Tests (${{ matrix.gramps_ref }})'
+          path: test-results/*.xml
+          reporter: java-junit
