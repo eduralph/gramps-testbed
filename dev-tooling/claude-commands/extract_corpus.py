@@ -47,20 +47,48 @@ def read(path):
         return ""
 
 def parse_status(summary_text):
-    """Pull a normalized status from the SUMMARY.md '## Status' section if present,
-    else scan the whole doc. Returns (status, raw_status_line)."""
+    """Normalized status from SUMMARY.md. Resolution order:
+      1. explicit '## Status' section, matched against STATUS_PATTERNS
+      2. structural inference when there's no '## Status' (batch-02 schema: the
+         summary records the fix via '## Fix' / '## Test' sections, not a status word)
+      3. whole-doc prose scan against STATUS_PATTERNS
+      4. 'unknown' (has a summary, but no recognizable status by any means)
+    Returns (status, raw_status_line)."""
     if not summary_text:
         return None, None
-    # prefer the Status section
+
+    def first_line(text):
+        return next((l.strip() for l in text.splitlines() if l.strip()), None)
+
+    # 1. explicit '## Status' section
     m = re.search(r"##\s*Status\s*\n(.+?)(?:\n##|\Z)", summary_text, re.S | re.I)
-    scope = m.group(1) if m else summary_text
-    low = scope.lower()
+    if m:
+        scope = m.group(1)
+        low = scope.lower()
+        for pat, label in STATUS_PATTERNS:
+            if re.search(pat, low):
+                return label, first_line(scope)
+        # explicit Status section but unrecognized phrasing → fall through to prose scan
+
+    # 2. structural inference (no '## Status' — the batch-02 case). A '## Fix' section is
+    #    the schema's way of saying "a fix was written"; '## Root cause' + '## Test' confirm
+    #    a worked fix. This is what batch-02 summaries use instead of a status word.
+    if not m:
+        headers = set(h.strip().lower() for h in re.findall(r"^##\s*(.+?)\s*$", summary_text, re.M))
+        if "fix" in headers:
+            return "fixed", "inferred from '## Fix' section (no '## Status' — batch-02 schema)"
+        # 'already fixed upstream' / verification batches sometimes title that way
+        if any("already" in h or "verif" in h for h in headers):
+            return "verified", "inferred from section headers (no '## Status')"
+
+    # 3. whole-doc prose scan
+    low = summary_text.lower()
     for pat, label in STATUS_PATTERNS:
         if re.search(pat, low):
-            # grab a representative line for context
-            line = next((l.strip() for l in scope.splitlines() if l.strip()), None)
-            return label, line
-    return "unknown", next((l.strip() for l in scope.splitlines() if l.strip()), None)
+            return label, first_line(summary_text)
+
+    # 4. genuinely unrecognized
+    return "unknown", first_line(summary_text)
 
 def parse_repo_branch(summary_text):
     repo = branch = None

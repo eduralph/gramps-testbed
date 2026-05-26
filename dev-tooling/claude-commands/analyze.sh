@@ -60,9 +60,17 @@ if "_error" in pr:
     lines.append(f"  ERROR reading pyright.json: {pr['_error']}")
 else:
     summ = pr.get("summary", {})
-    lines.append(f"  files={summ.get('filesAnalyzed','?')} "
+    nfiles = summ.get('filesAnalyzed', 0)
+    lines.append(f"  files={nfiles} "
                  f"errors={summ.get('errorCount','?')} "
                  f"warnings={summ.get('warningCount','?')}")
+    # Loudest failure first: zero files analyzed is a NO-OP, not a clean pass. Means the
+    # include paths didn't resolve (config-relative path bug) — treat as broken, not green.
+    if nfiles in (0, "0"):
+        lines.append("  !! ZERO FILES ANALYZED — this is a no-op, not a clean pass. The")
+        lines.append("     include paths in pyrightconfig.experiment.json did not resolve")
+        lines.append("     (they are relative to the CONFIG file's dir, not cwd). Findings below")
+        lines.append("     are meaningless until this is fixed.")
     for rule, n in by_rule.most_common():
         lines.append(f"  {n:4}  {rule}")
     # flag anything that is NOT one of the five intended Optional rules
@@ -70,7 +78,9 @@ else:
                 "reportOptionalOperand","reportOptionalIterable"}
     leaked = [r for r in by_rule if r not in intended and r != "(no-rule)"]
     if leaked:
-        lines.append(f"  !! NON-Optional rules leaked (config/include too broad?): {', '.join(leaked)}")
+        lines.append(f"  !! NON-Optional rules present: {', '.join(leaked)}. Either the config")
+        lines.append(f"     is STALE (missing a silence for these) or include is too broad.")
+        lines.append(f"     Add \"{leaked[0]}\": \"none\" to pyrightconfig.experiment.json if outside None-flow scope.")
 lines.append("")
 
 # one line per pyright finding

@@ -24,5 +24,7 @@
   "reportMissingParameterType": "none",
   "reportAttributeAccessIssue": "none",
   "reportGeneralTypeIssues": "none",
-  "reportArgumentType": "none"
+  "reportArgumentType": "none",
+  "reportAssignmentType": "none",
+  "reportMissingImports": "none"
 }
