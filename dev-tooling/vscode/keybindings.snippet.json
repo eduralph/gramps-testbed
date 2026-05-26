@@ -1,0 +1,22 @@
+// Merge into your VS Code keybindings.json (Ctrl+Shift+P -> "Preferences: Open Keyboard Shortcuts (JSON)").
+// Binds the combined analyzer run. Adjust the chord to taste; Ctrl+Alt+A is usually free.
+[
+  {
+    "key": "ctrl+alt+a",
+    "command": "workbench.action.tasks.runTask",
+    "args": "dev-tooling: all analyzers",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "ctrl+alt+p",
+    "command": "workbench.action.tasks.runTask",
+    "args": "dev-tooling: pyright (scoped None-flow)",
+    "when": "!terminalFocus"
+  },
+  {
+    "key": "ctrl+alt+s",
+    "command": "workbench.action.tasks.runTask",
+    "args": "dev-tooling: semgrep (gramps shape patterns)",
+    "when": "!terminalFocus"
+  }
+]

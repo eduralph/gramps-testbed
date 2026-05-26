@@ -1,0 +1,21 @@
+{
+  "// dev-tooling note": "These keys are SAFE to merge into gramps-testbed/.vscode/settings.json.",
+  "// critical": "Do NOT add a pyrightconfig.json at the testbed root and do NOT set",
+  "// critical 2": "python.analysis.* type-checking overrides here. The experiment config is",
+  "// critical 3": "invoked ONLY via the dev-tooling tasks (--project). Letting Pylance",
+  "// critical 4": "auto-discover it would put the WHOLE testbed under the GTK-silenced",
+  "// critical 5": "experiment rules and (per Pylance) lock out settings.json overrides.",
+
+  "// semgrep ext": "If you install the official Semgrep extension (semgrep.semgrep),",
+  "// semgrep ext 2": "point it at the rules dir so its live scan matches the task/CI. Omit",
+  "// semgrep ext 3": "this block if you prefer task-only invocation (lighter for one rule).",
+  "semgrep.scan.configuration": ["dev-tooling/semgrep/rules/"],
+  "semgrep.scan.onSave": true,
+
+  "// pylance in-editor": "Leave Pylance on its NORMAL behavior for the testbed's own",
+  "// pylance in-editor 2": "python. The experiment's narrowing is intentionally task-scoped,",
+  "// pylance in-editor 3": "not editor-global. Nothing to set here.",
+
+  "// tasks": "Run analyzers via Terminal -> Run Task, the keybinding (see keybindings.json),",
+  "// tasks 2": "or 'dev-tooling: all analyzers'. Findings appear in the Problems panel."
+}

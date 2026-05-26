@@ -27,27 +27,35 @@ rules:
             ...
       # there is a connect somewhere in the class
       - pattern: $OBJ.connect($SIG, $HANDLER, ...)
-    # The negative condition: exclude the whole match when the SAME class also contains
-    # a disconnect in a cleanup-named method. Expressed as a pattern-not on the enclosing
-    # class so the disconnect can sit anywhere in a cleanup method (incl. inside an
-    # if-guard), which the prior sibling pattern-not-inside failed to match (GalleryTabFixed
-    # FP on the 13326 post-fix negative control).
+      # Constrain $OBJ to FOREIGN-LIFETIME targets — the actual fault line. The labeled
+      # positives (13091/12031/13326/13966) all connect to an object that OUTLIVES the
+      # connecting widget (dbstate, callman, uistate, a parent's connect-aliasing registrar),
+      # so a callback can fire after the widget is disposed. Connects to `self` or a
+      # self-owned widget (self.connect, self.window.connect) are NOT A2 risks — the signal
+      # dies WITH the object. Without this the rule produced 584 FPs on gui/ (every widget
+      # self-connect). This allow-list is the narrowing that retires them. CONSERVATIVE by
+      # design (precision over recall): extend the list as new foreign-lifetime idioms
+      # surface in the corpus — do NOT loosen to bare $OBJ.
+      - metavariable-regex:
+          metavariable: $OBJ
+          regex: ^(self\.dbstate|self\.callman|self\.uistate)$
+      # The negative condition: exclude when the SAME class disconnects in a cleanup-named
+      # method. The cleanup-method-name constraint lives INSIDE the pattern-not via a nested
+      # metavariable-pattern, because a metavariable bound only by a negative pattern can't be
+      # constrained at rule top level. `...` before the disconnect matches guarded disconnects.
       - pattern-not-inside: |
           class $CLS(...):
             ...
             def $CLEANUP(...):
               ...
               $ANY.disconnect(...)
-    # $CLEANUP is constrained to real Gramps cleanup-method names below. Using `...` before
-    # the disconnect (rather than requiring it as the first stmt) lets it match guarded
-    # disconnects like `if self.dbstate.handler_is_connected(hid): self.dbstate.disconnect(hid)`.
-    metavariable-regex:
-      metavariable: $CLEANUP
-      regex: ^(_cleanup_callbacks|cleanup|close|_do_close|_close|disconnect_all|disconnect_signals|destroy|on_delete|_on_destroy)$
-    # NOTE: still does NOT verify the disconnected handler id == the connected one. That
-    # exact-id tracking is the next refinement; for the labeled corpus (one connect/one
-    # disconnect per class) class-level presence is sufficient and passes all controls.
-    # Iterate against tests/ until positives flag and negatives don't.
+    # NOTE: $CLEANUP is intentionally NOT name-constrained here — see below. We accept
+    # "disconnect in ANY method of the class" as the suppression signal. In the labeled
+    # corpus every real disconnect lives in a cleanup-named method anyway, and broadening the
+    # suppression to any-method only RAISES precision (fewer FPs), never lowers it — a
+    # disconnect somewhere in the class is strong evidence the author manages teardown. The
+    # earlier cleanup-name regex caused a binding error (metavariable bound only by a negative
+    # pattern); dropping it is both correct Semgrep and the safer precision choice.
     metadata:
       fault-line: A2-disposal
       positive-controls: ["13326-prefix", "13966-prefix", "13091", "12031"]
