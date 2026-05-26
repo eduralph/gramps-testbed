@@ -51,7 +51,7 @@ Run `./scripts/bootstrap-forks.sh` to produce that layout.
 | `addon-unit-tests.yml` | Run per-addon `tests/test_*.py` suites | push, PR, cron, manual |
 | `docker-build.yml` | Build the Ubuntu Docker test image | push (Dockerfile paths), PR (Dockerfile paths), cron, manual |
 | `upstream-sync.yml` | Open fork-sync PRs from upstream | cron, manual |
-| `dev-tooling.yml` | Advisory shape+flow analyzers (pyright + semgrep) against gramps source | push, PR, cron, manual (with parameterised gramps repo/ref) |
+| `dev-tooling.yml` | Advisory shape+flow analyzers (pyright + semgrep) against gramps source | push, PR, cron, manual (parameterised gramps repo/ref) |
 
 All three test workflows accept `workflow_dispatch` inputs to override
 which repos/refs to pull — useful for isolating a regression against a
@@ -107,6 +107,51 @@ the per-issue verdict format — are documented in
 `triage/data/` and `triage/notes/` are gitignored: they are regenerable
 exports of third-party tracker content. The verdicts and scripts are tracked,
 since the verdict is the curated judgment the pipeline produces.
+
+## Static analysis (dev-tooling)
+
+`dev-tooling/` is an authoring-time analyzer stack that catches recurring bug
+classes from the fault-line analysis *before* they're filed — the same "shrink
+the backlog without re-growing it" intent as the triage pipeline, applied to the
+gramps source. Three tools, layered shape-vs-flow and editor → commit → CI:
+
+- **pyright** (tuned) — generic None/Optional type-flow, in-editor, instant.
+  Scoped to a hot-file allowlist with GTK-typing noise silenced.
+- **semgrep** — Gramps-specific shape patterns (e.g. connect-without-disconnect
+  on foreign-lifetime objects), pre-commit + CI.
+- **CodeQL** — path-sensitive flow the other two can't reach (init-order, deep
+  None-flow). Staged but disabled; added only if the corpus shows that residual
+  recurs. See `dev-tooling/codeql/NOTES_codeql.md`.
+
+The tools analyze the sibling `../gramps` fork (same cross-repo convention as
+`additionalDirectories`), so the configs travel with the testbed while the forks
+stay clean. Each is tuned to **high precision over recall** — a false positive
+at authoring time trains developers to ignore the tool, so a check that can't hit
+zero false positives is narrowed until it can.
+
+### Running
+
+Two Claude Code slash commands (install from `dev-tooling/claude-commands/` into
+`.claude/commands/`), or the underlying scripts directly:
+
+| Command | What it does |
+| --- | --- |
+| `/analyze` | Runs pyright + semgrep against `../gramps`, writes structured findings + a triage table. |
+| `/corpus-feedback` | Mines the triage batch results for recurring fix-shapes, ranks them, proposes new analyzer rules. |
+
+The same configs back three enforcement tiers: VS Code tasks (advisory, in-editor
+— see `dev-tooling/vscode/`), pre-commit (blocking, local — `dev-tooling/.pre-commit-config.experiment.yaml`),
+and CI (advisory — `dev-tooling.yml`).
+
+Findings land in `dev-tooling/findings/` (gitignored; regenerable).
+
+### The loop
+
+Triage → fix (with regression test) → batch results → `/corpus-feedback` mines
+them → ranked backlog of analyzer-reachable fix-shapes → write the top rule
+against its corpus controls → `/analyze` catches the next instance at authoring
+time. A fix-shape that recurs becomes a rule; the rule retires the next instance
+before it's filed.
 
 ## Configuration
 
@@ -188,15 +233,15 @@ pipeline's verdicts point fixes at.
 - **Triage pipeline** (`triage/`) selects and prepares tracker bugs for
   fixing, with each fix expected to return a regression test to one of
   the suites above. See [Triage pipeline](#triage-pipeline).
-- **Authoring-time analyzers** (`dev-tooling/`, run by `dev-tooling.yml`)
-  layer pyright (scoped None/Optional flow) and Semgrep (Gramps shape
-  patterns, e.g. connect-without-disconnect) against the gramps source.
-  Advisory in CI — findings are informative, never gate merges — with
-  the hard zero-FP gate living in
-  `dev-tooling/.pre-commit-config.experiment.yaml` for local commits.
-  Tuned against a labeled corpus of upstream bug IDs (13091, 13326,
-  fanchart PR 2315, …). CodeQL is staged but disabled until a residual
-  flow class needs it. See `dev-tooling/README.md`.
+- **Static analysis** (`dev-tooling/`) layers pyright (None/Optional flow) and
+  Semgrep (Gramps shape patterns) against the gramps source, advisory in CI with
+  a blocking pre-commit gate. The one shipped Semgrep rule
+  (`gramps-connect-without-disconnect`) catches the A2 post-disposal class —
+  connects to foreign-lifetime objects (dbstate/callman/uistate) with no
+  disconnect in cleanup — tuned to zero false positives against a labeled corpus
+  of upstream bug IDs. `/analyze` runs the analyzers; `/corpus-feedback` mines the
+  fixed-bug corpus for the next rule to write. CodeQL is staged but disabled
+  pending evidence its residual flow class recurs. See `dev-tooling/README.md`.
 
 See CLAUDE.md "CI gates and branch protection" for which workflows
 block merges (none of the test workflows do; all advisory).
