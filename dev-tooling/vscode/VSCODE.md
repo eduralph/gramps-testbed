@@ -28,7 +28,7 @@ explicitly via `--project` from tasks. Pylance's normal in-editor analysis of
 the testbed is left untouched; the scoped experiment runs on demand against
 `../gramps`.
 
-## Install
+## Install the tools
 
 ```bash
 # from the testbed root, on your Ubuntu workstation
@@ -38,19 +38,42 @@ pip install --break-system-packages pyright semgrep
 Pyright's CLI needs Node (it ships its own via the pip wheel's bundled runtime
 on most platforms; if `pyright --version` fails, install Node 18+).
 
-## Files to merge
+## Installing the files
 
-Copy from `dev-tooling/vscode/` into the testbed's `.vscode/` (create if absent):
+**Critical:** VS Code only reads files named *exactly* `tasks.json`, `settings.json`,
+and `keybindings.json`. The `.snippet.json` files in `dev-tooling/vscode/` are
+deliberately misnamed so they stay **inert** until you place them — they're
+templates, because you may already have a `settings.json`, and keybindings live in
+your *user* profile (not the workspace). A `settings.snippet.json` sitting in
+`.vscode/` does nothing.
 
-| Source | Destination | Notes |
-| --- | --- | --- |
-| `tasks.json` | `.vscode/tasks.json` | merge the `tasks` array if you already have one |
-| `settings.snippet.json` | `.vscode/settings.json` | merge keys; read the `//` notes first |
-| `keybindings.snippet.json` | (user) keybindings.json | optional chords |
+For each, the rule is: **rename if you have nothing prior, merge if you do.**
 
-`.vscode/tasks.json` and `.vscode/settings.json` are committed (shared); they
-travel with the testbed. Per-developer tweaks go in `settings.local`-style
-overrides if you keep any.
+| Source (`dev-tooling/vscode/`) | Goes to | If you have nothing there yet | If you already have one |
+| --- | --- | --- | --- |
+| `tasks.json` | `.vscode/tasks.json` | copy as-is (already correctly named) | merge the `tasks` array |
+| `settings.snippet.json` | `.vscode/settings.json` | `mv` it (rename) | merge its keys by hand |
+| `keybindings.snippet.json` | **user** `keybindings.json` | paste the array in | merge the array in |
+
+Concretely, from the testbed root:
+
+```bash
+# tasks: correctly named already — just copy
+cp dev-tooling/vscode/tasks.json .vscode/tasks.json
+
+# settings: rename if absent, else merge by hand
+[ -f .vscode/settings.json ] \
+  && echo "you have a settings.json — merge settings.snippet.json's keys into it by hand" \
+  || cp dev-tooling/vscode/settings.snippet.json .vscode/settings.json
+
+# keybindings: NOT a workspace file. Open the user keybindings and paste the array:
+#   Ctrl+Shift+P -> "Preferences: Open Keyboard Shortcuts (JSON)"
+# Do NOT leave a keybindings.snippet.json in .vscode/ — it's inert there.
+```
+
+Keybindings are optional — if you don't set them, use `Terminal -> Run Task` from
+the palette instead. `.vscode/tasks.json` and `.vscode/settings.json` are committed
+(shared) and travel with the testbed.
 
 ## Running
 
