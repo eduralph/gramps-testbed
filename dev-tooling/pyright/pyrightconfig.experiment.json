@@ -1,0 +1,30 @@
+{
+  "include": [
+    "../../../gramps/gramps/gui/widgets/fanchart.py",
+    "../../../gramps/gramps/gui/widgets/styledtexteditor.py",
+    "../../../gramps/gramps/gui/widgets/styledtextbuffer.py",
+    "../../../gramps/gramps/gui/dbguielement.py",
+    "../../../gramps/gramps/gui/managedwindow.py"
+  ],
+
+  "typeCheckingMode": "basic",
+
+  "reportOptionalMemberAccess": "error",
+  "reportOptionalSubscript": "error",
+  "reportOptionalCall": "error",
+  "reportOptionalOperand": "error",
+  "reportOptionalIterable": "error",
+
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownParameterType": "none",
+  "reportUnknownLambdaType": "none",
+  "reportMissingParameterType": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportArgumentType": "none",
+  "reportAssignmentType": "none",
+  "reportMissingImports": "none"
+}

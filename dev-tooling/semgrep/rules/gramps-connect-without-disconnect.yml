@@ -1,0 +1,63 @@
+# Semgrep rule — A2 disposal-half: a DbGUIElement / ManagedWindow-style class that
+# connects a callback but has no disconnect in its cleanup path.
+#
+# SCOPE (honest): this catches the SHAPE "class connects a signal and its cleanup method
+# does not disconnect". It does NOT catch flow-dependent A2 (e.g. 14177 mid-init access) —
+# that has no connect to match and needs CodeQL/structural. Named accordingly.
+#
+# This is a STARTING rule to iterate against the labeled corpus. Expect to refine the
+# connect/disconnect idioms and the cleanup-method names to Gramps's actual conventions.
+# Tune toward ZERO false positives (authoring-time tool) even if recall drops.
+
+rules:
+  - id: gramps-connect-without-disconnect
+    languages: [python]
+    severity: WARNING
+    message: >
+      This class connects a callback (signal/dbstate/callman) but its cleanup path does
+      not appear to disconnect it. A callback that fires after the object is disposed
+      raises AttributeError on torn-down state (fault-line class A2, disposal half:
+      see 13326, 13966, 13091, 12031). Add a disconnect in the cleanup method, or
+      register via a mechanism that auto-disconnects on teardown.
+    # Match a class that has a .connect( ... ) somewhere, AND lacks a .disconnect( in a
+    # cleanup-named method. This is the v0 shape — refine the patterns against real code.
+    patterns:
+      - pattern-inside: |
+          class $CLS(...):
+            ...
+      # there is a connect somewhere in the class
+      - pattern: $OBJ.connect($SIG, $HANDLER, ...)
+      # Constrain $OBJ to FOREIGN-LIFETIME targets — the actual fault line. The labeled
+      # positives (13091/12031/13326/13966) all connect to an object that OUTLIVES the
+      # connecting widget (dbstate, callman, uistate, a parent's connect-aliasing registrar),
+      # so a callback can fire after the widget is disposed. Connects to `self` or a
+      # self-owned widget (self.connect, self.window.connect) are NOT A2 risks — the signal
+      # dies WITH the object. Without this the rule produced 584 FPs on gui/ (every widget
+      # self-connect). This allow-list is the narrowing that retires them. CONSERVATIVE by
+      # design (precision over recall): extend the list as new foreign-lifetime idioms
+      # surface in the corpus — do NOT loosen to bare $OBJ.
+      - metavariable-regex:
+          metavariable: $OBJ
+          regex: ^(self\.dbstate|self\.callman|self\.uistate)$
+      # The negative condition: exclude when the SAME class disconnects in a cleanup-named
+      # method. The cleanup-method-name constraint lives INSIDE the pattern-not via a nested
+      # metavariable-pattern, because a metavariable bound only by a negative pattern can't be
+      # constrained at rule top level. `...` before the disconnect matches guarded disconnects.
+      - pattern-not-inside: |
+          class $CLS(...):
+            ...
+            def $CLEANUP(...):
+              ...
+              $ANY.disconnect(...)
+    # NOTE: $CLEANUP is intentionally NOT name-constrained here — see below. We accept
+    # "disconnect in ANY method of the class" as the suppression signal. In the labeled
+    # corpus every real disconnect lives in a cleanup-named method anyway, and broadening the
+    # suppression to any-method only RAISES precision (fewer FPs), never lowers it — a
+    # disconnect somewhere in the class is strong evidence the author manages teardown. The
+    # earlier cleanup-name regex caused a binding error (metavariable bound only by a negative
+    # pattern); dropping it is both correct Semgrep and the safer precision choice.
+    metadata:
+      fault-line: A2-disposal
+      positive-controls: ["13326-prefix", "13966-prefix", "13091", "12031"]
+      negative-controls: ["13326-postfix-PR2330", "13966-postfix-addons913"]
+      out-of-scope: ["14177-midinit (no connect; CodeQL/structural)"]
