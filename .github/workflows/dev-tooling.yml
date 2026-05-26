@@ -31,6 +31,18 @@ permissions:
 jobs:
   shape-and-flow:
     runs-on: ubuntu-24.04
+    # ADVISORY at the JOB level — same pattern as unit-tests.yml / addon-unit-tests.yml.
+    # `continue-on-error` here makes the WORKFLOW conclusion stay green even when the
+    # JOB is red, so findings don't gate merges. The check-run / job conclusion still
+    # accurately reflects findings — pyright exits non-zero on type errors, semgrep is
+    # invoked with --error below so it exits non-zero on rule matches.
+    #
+    # Putting `continue-on-error` at the STEP level (as this workflow originally did)
+    # was wrong: it made the step "succeed" regardless of findings, so the check-run
+    # went green even when 39 None-flow errors were live in gramps. Findings were
+    # silently invisible. The job-level placement matches the convention the testbed
+    # already uses elsewhere.
+    continue-on-error: true
     steps:
       - name: Checkout testbed
         uses: actions/checkout@v4
@@ -66,20 +78,20 @@ jobs:
       - name: Install analyzers
         run: pip install --break-system-packages pyright semgrep
 
-      # ADVISORY: continue-on-error so findings are informative red, not a merge gate.
-      # No --error on semgrep here (that's the pre-commit gate's job). The job summary
-      # surfaces findings; the step status reflects them without failing the workflow.
+      # Both analyzers exit non-zero on findings — pyright by default, semgrep via
+      # --error (without it, semgrep exits 0 regardless of matches). The job-level
+      # continue-on-error: true above keeps the workflow green; the job/check-run
+      # accurately reflects whether findings exist. Hard zero-FP blocking lives in
+      # pre-commit (.pre-commit-config.experiment.yaml), local.
       - name: pyright (scoped None-flow)
         id: pyright
-        continue-on-error: true
         working-directory: gramps-testbed
         run: pyright --project dev-tooling/pyright/pyrightconfig.experiment.json
 
       - name: semgrep (gramps shape patterns)
         id: semgrep
-        continue-on-error: true
         working-directory: gramps-testbed
-        run: semgrep --config dev-tooling/semgrep/rules/ ../gramps/gramps/gui/
+        run: semgrep --error --config dev-tooling/semgrep/rules/ ../gramps/gramps/gui/
 
       # Rule self-test is NOT advisory: a rule that no longer pairs with its labeled
       # fixtures is a tooling regression, not an informative finding about gramps. Fail.
