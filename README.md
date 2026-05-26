@@ -51,12 +51,15 @@ Run `./scripts/bootstrap-forks.sh` to produce that layout.
 | `addon-unit-tests.yml` | Run per-addon `tests/test_*.py` suites | push, PR, cron, manual |
 | `docker-build.yml` | Build the Ubuntu Docker test image | push (Dockerfile paths), PR (Dockerfile paths), cron, manual |
 | `upstream-sync.yml` | Open fork-sync PRs from upstream | cron, manual |
+| `dev-tooling.yml` | Advisory shape+flow analyzers (pyright + semgrep) against gramps source | push, PR, cron, manual (with parameterised gramps repo/ref) |
 
 All three test workflows accept `workflow_dispatch` inputs to override
 which repos/refs to pull — useful for isolating a regression against a
 specific branch or commit. `addon-unit-tests.yml` additionally accepts
 a space-separated `addons` input; empty means "every addon with
-`tests/test_*.py`".
+`tests/test_*.py`". `dev-tooling.yml` resolves its gramps source via
+the same input → variable → same-owner-default chain
+(`gramps_repo`/`vars.GRAMPS_REPO`, `gramps_ref`/`vars.GRAMPS_REF`).
 
 ## Triage pipeline
 
@@ -185,6 +188,15 @@ pipeline's verdicts point fixes at.
 - **Triage pipeline** (`triage/`) selects and prepares tracker bugs for
   fixing, with each fix expected to return a regression test to one of
   the suites above. See [Triage pipeline](#triage-pipeline).
+- **Authoring-time analyzers** (`dev-tooling/`, run by `dev-tooling.yml`)
+  layer pyright (scoped None/Optional flow) and Semgrep (Gramps shape
+  patterns, e.g. connect-without-disconnect) against the gramps source.
+  Advisory in CI — findings are informative, never gate merges — with
+  the hard zero-FP gate living in
+  `dev-tooling/.pre-commit-config.experiment.yaml` for local commits.
+  Tuned against a labeled corpus of upstream bug IDs (13091, 13326,
+  fanchart PR 2315, …). CodeQL is staged but disabled until a residual
+  flow class needs it. See `dev-tooling/README.md`.
 
 See CLAUDE.md "CI gates and branch protection" for which workflows
 block merges (none of the test workflows do; all advisory).
@@ -196,3 +208,6 @@ block merges (none of the test workflows do; all advisory).
 - Upstream maintainers have not (yet) adopted GUI testing. Float interface
   test contributions on `gramps-devel` before investing heavily in
   upstream-targeted tests.
+- The pyright analyzer is scoped to a hot-file allowlist with GTK-typing
+  rules silenced; expanding `include` re-introduces untyped-GTK noise. Keep
+  it narrow (precision over recall) — it is an authoring-time tool.

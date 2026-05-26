@@ -1,0 +1,24 @@
+# EXPERIMENT pre-commit config — wires the authoring-time tools (pyright + semgrep).
+# CodeQL is NOT here (it's CI-tier, too heavy for pre-commit). Copy/merge into the repo's
+# .pre-commit-config.yaml when the rules are tuned to zero-FP. Until then, run manually:
+#   pre-commit run --all-files --config dev-tooling/.pre-commit-config.experiment.yaml
+#
+# PATHS assume invocation from gramps-testbed/ repo root. pyright analyzes the sibling
+# ../gramps fork via the include list in its config; semgrep scans the rules dir.
+repos:
+  - repo: local
+    hooks:
+      - id: pyright-scoped
+        name: pyright (scoped None-flow, hot files)
+        entry: pyright --project dev-tooling/pyright/pyrightconfig.experiment.json
+        language: system
+        types: [python]
+        pass_filenames: false
+
+      - id: semgrep-gramps-patterns
+        name: semgrep (gramps shape patterns)
+        entry: semgrep --config dev-tooling/semgrep/rules/ --error
+        language: python
+        additional_dependencies: ["semgrep"]
+        types: [python]
+        pass_filenames: false

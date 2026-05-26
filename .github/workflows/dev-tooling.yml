@@ -1,0 +1,125 @@
+name: dev-tooling
+
+# Shape+flow analyzer gate (pyright + semgrep) — ADVISORY in CI, matching the testbed's
+# "all test workflows advisory; informative red without gating merges" philosophy. The
+# hard zero-FP gate lives in pre-commit (dev-tooling/.pre-commit-config.experiment.yaml),
+# which runs locally on your own commits. CodeQL is a separate, disabled job (NOTES_codeql.md):
+# add it only once the in-editor tools are tuned and a residual flow class remains.
+#
+# Cross-repo: these analyzers target the gramps SOURCE, not the testbed. We check out the
+# sibling gramps fork at ../gramps so the include paths resolve, mirroring the local
+# four-sibling workspace layout. Repo/ref resolution matches the other test workflows:
+#   workflow_dispatch input  ->  repository variable  ->  same-owner default.
+
+on:
+  push:
+  pull_request:
+  schedule:
+    - cron: "0 5 * * 1"   # weekly, Monday 05:00 UTC — matches the cron cadence of the suite
+  workflow_dispatch:
+    inputs:
+      gramps_repo:
+        description: "owner/repo of the gramps fork to analyze"
+        required: false
+      gramps_ref:
+        description: "branch/tag/SHA of the gramps fork to analyze"
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  shape-and-flow:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout testbed
+        uses: actions/checkout@v4
+        with:
+          path: gramps-testbed
+
+      # Resolve gramps repo/ref: input -> repository variable -> same-owner default.
+      - name: Resolve gramps source
+        id: src
+        run: |
+          repo="${{ github.event.inputs.gramps_repo }}"
+          ref="${{ github.event.inputs.gramps_ref }}"
+          repo="${repo:-${{ vars.GRAMPS_REPO }}}"
+          ref="${ref:-${{ vars.GRAMPS_REF }}}"
+          repo="${repo:-${{ github.repository_owner }}/gramps}"
+          ref="${ref:-maintenance/gramps60}"
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref"   >> "$GITHUB_OUTPUT"
+          echo "Analyzing $repo @ $ref"
+
+      - name: Checkout gramps fork (sibling)
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ steps.src.outputs.repo }}
+          ref: ${{ steps.src.outputs.ref }}
+          path: gramps
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install analyzers
+        run: pip install --break-system-packages pyright semgrep
+
+      # ADVISORY: continue-on-error so findings are informative red, not a merge gate.
+      # No --error on semgrep here (that's the pre-commit gate's job). The job summary
+      # surfaces findings; the step status reflects them without failing the workflow.
+      - name: pyright (scoped None-flow)
+        id: pyright
+        continue-on-error: true
+        working-directory: gramps-testbed
+        run: pyright --project dev-tooling/pyright/pyrightconfig.experiment.json
+
+      - name: semgrep (gramps shape patterns)
+        id: semgrep
+        continue-on-error: true
+        working-directory: gramps-testbed
+        run: semgrep --config dev-tooling/semgrep/rules/ ../gramps/gramps/gui/
+
+      # Rule self-test is NOT advisory: a rule that no longer pairs with its labeled
+      # fixtures is a tooling regression, not an informative finding about gramps. Fail.
+      - name: semgrep rule self-test
+        working-directory: gramps-testbed/dev-tooling/semgrep
+        run: semgrep --test --config rules/ tests/
+
+      - name: Advisory summary
+        if: always()
+        run: |
+          {
+            echo "## dev-tooling analyzers (advisory)"
+            echo ""
+            echo "Source: \`${{ steps.src.outputs.repo }}\` @ \`${{ steps.src.outputs.ref }}\`"
+            echo ""
+            echo "| Analyzer | Result |"
+            echo "| --- | --- |"
+            echo "| pyright (None-flow) | ${{ steps.pyright.outcome }} |"
+            echo "| semgrep (shape) | ${{ steps.semgrep.outcome }} |"
+            echo ""
+            echo "_Advisory: findings do not gate merges. The hard zero-FP gate is pre-commit, local._"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # ---------------------------------------------------------------------------
+  # CodeQL — DISABLED until the residual flow class is reached (see NOTES_codeql.md).
+  # Owns ONLY path-sensitive flow pyright misses (e.g. 14177 init-order). Do not
+  # re-implement generic None-deref here. Uncomment + flip `if` when ready.
+  # ---------------------------------------------------------------------------
+  # codeql-residual-flow:
+  #   if: false
+  #   runs-on: ubuntu-24.04
+  #   permissions:
+  #     security-events: write
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #       with:
+  #         repository: ${{ github.repository_owner }}/gramps
+  #         ref: maintenance/gramps60
+  #     - uses: github/codeql-action/init@v3
+  #       with:
+  #         languages: python
+  #         # queries: ./dev-tooling/codeql/queries   # custom init-order query
+  #     - uses: github/codeql-action/analyze@v3

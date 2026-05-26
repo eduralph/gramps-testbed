@@ -1,0 +1,36 @@
+{
+  "//": "EXPERIMENT config — scope pyright to the fault-line hot files, with only the",
+  "//2": "Optional/None rules as errors and the GTK-noise rules silenced.",
+  "//3": "PATHS: relative to gramps-testbed/ repo root. Analyzes the SIBLING gramps fork",
+  "//4": "(../gramps), matching the testbed's additionalDirectories convention. Run with:",
+  "//5": "  pyright --project dev-tooling/pyright/pyrightconfig.experiment.json",
+  "//6": "from the testbed root. Expand 'include' as files prove clean.",
+
+  "include": [
+    "../gramps/gramps/gui/widgets/fanchart.py",
+    "../gramps/gramps/gui/widgets/styledtexteditor.py",
+    "../gramps/gramps/gui/widgets/styledtextbuffer.py",
+    "../gramps/gramps/gui/dbguielement.py",
+    "../gramps/gramps/gui/managedwindow.py"
+  ],
+
+  "typeCheckingMode": "basic",
+
+  "//rules": "KEEP the None/Optional rules; SILENCE the untyped-GTK noise that made VSC unusable.",
+  "reportOptionalMemberAccess": "error",
+  "reportOptionalSubscript": "error",
+  "reportOptionalCall": "error",
+  "reportOptionalOperand": "error",
+  "reportOptionalIterable": "error",
+
+  "reportMissingTypeStubs": "none",
+  "reportUnknownMemberType": "none",
+  "reportUnknownVariableType": "none",
+  "reportUnknownArgumentType": "none",
+  "reportUnknownParameterType": "none",
+  "reportUnknownLambdaType": "none",
+  "reportMissingParameterType": "none",
+  "reportAttributeAccessIssue": "none",
+  "reportGeneralTypeIssues": "none",
+  "reportArgumentType": "none"
+}
