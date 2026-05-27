@@ -21,6 +21,18 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
 ## Conventions
 - All tests use stdlib unittest.TestCase (contributable upstream; gramps
   itself uses unittest, so pytest is not introduced anywhere in the testbed)
+- Local pre-commit + post-push verification (set up via
+  `dev-tooling/pre-commit/install.sh`):
+  - Pre-commit runs black + mypy (gramps), ruff E9/F63/F7/F82 +
+    ast.parse (addons-source + testbed). Configs are out-of-tree under
+    `dev-tooling/pre-commit/` so fork maintenance branches stay clean
+    of dev-tooling commits. See `dev-tooling/pre-commit/README.md` for
+    what each hook catches.
+  - After pushing a fork branch, verify the resulting PR is green:
+    `./scripts/verify-pr.sh <org/repo> <PR#> --watch`. Required because
+    pre-commit only catches static checks; test failures (e.g. PR 2335
+    where a `__new__`-built fixture was missing `dbstate` / `uistate`)
+    only surface in CI's actual unit-test run.
 - Local runs, mirrors CI:
   - Ubuntu (containerised, Docker):
     - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests

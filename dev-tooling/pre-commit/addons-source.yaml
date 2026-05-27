@@ -1,0 +1,48 @@
+# Pre-commit config for the eduralph/addons-source fork.
+#
+# Lives in gramps-testbed/dev-tooling/pre-commit/ so the addons-source
+# fork's tracked branches stay clean. Install via the sibling
+# install.sh which calls `pre-commit install -c <this-file>` from inside
+# ../addons-source/.
+#
+# Hooks chosen to match the lint job in PR 820's .github/workflows/ci.yml
+# (the CI/CD pipeline that's currently the gate the fork CI runs):
+#
+#     ruff check --select=E9,F63,F7,F82 --no-fix --exclude='*.gpr.py' .
+#
+# plus a py_compile pass that mirrors the compile-check job. addons-source
+# CI does not use black or mypy.
+
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        # Match the CI invocation (PR 820 ci.yml lint job:
+        # `ruff check --select=E9,F63,F7,F82 --no-fix
+        #     --exclude='*.gpr.py' .`). The ruff hook's entry is
+        # `ruff check --force-exclude`, so do NOT repeat `check` in
+        # args -- pre-commit appends args after the entry.
+        args:
+          - --select=E9,F63,F7,F82
+          - --no-fix
+        files: \.py$
+        exclude: \.gpr\.py$
+
+  - repo: local
+    hooks:
+      - id: py-syntax
+        name: ast.parse (catch SyntaxError before commit)
+        language: system
+        # `py_compile` writes .pyc files into __pycache__/, which often
+        # has Docker-created entries we can't write to from the host.
+        # ast.parse does the same SyntaxError check without writing.
+        entry: python3 -c "import ast,sys;[ast.parse(open(p).read(),p) for p in sys.argv[1:]]"
+        files: \.py$
+        # Mirror the compile-check job, which also skips .gpr.py via
+        # its own filter shell-side; do the same here so a registration
+        # file's stub doesn't trip the hook.
+        exclude: \.gpr\.py$
