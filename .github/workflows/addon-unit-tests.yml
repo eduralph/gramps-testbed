@@ -72,22 +72,28 @@ jobs:
           path: addons-source
 
       - name: Install system dependencies
-        # No xvfb/dbus/at-spi — addon unit tests do not launch the GUI.
-        # Same apt list as unit-tests.yml: gramps.gen still imports gi on
-        # load, so GTK introspection bindings must be present.
+        # gramps.gen imports gi on load, so GTK introspection bindings must be
+        # present. xvfb is included because some addons (e.g. GraphView) create
+        # a Gtk style context at import time, which needs a display — the
+        # per-addon run below wraps in xvfb-run, mirroring run-addon-unit.sh.
         #
         # python3-venv / python3-pip are installed here so the next step
         # can build a venv that inherits python3-gi from the system
         # interpreter.
         run: |
           sudo apt-get update
+          # Base stack + addon system deps derived from the single-source map
+          # (scripts/lib/addon_system_deps.py) — keeps this list from drifting
+          # from what addons declare. gir1.2-gtk-3.0 is gramps' own base dep.
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-icu \
-            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
+            gir1.2-gtk-3.0 \
             libgirepository1.0-dev \
+            xvfb \
             gettext intltool \
-            librsvg2-common
+            librsvg2-common \
+            $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
 
       - name: Set up Python venv (inherits python3-gi from apt)
         # See unit-tests.yml for rationale — apt-installed PyGObject is
@@ -239,12 +245,30 @@ jobs:
               fail=1
               continue
             fi
+            rc=0
             (
               cd "$GITHUB_WORKSPACE/addons-source"
-              python -m xmlrunner "${modules[@]}" \
-                -o "$out_dir" \
-                -v
-            ) || fail=1
+              # xvfb-run: addons that create a Gtk style context at import need
+              #   a display (else a hard Gtk-ERROR abort, not a clean skip).
+              # PYTHONPATH gi_bootstrap: pin the GI versions (Pango/PangoCairo/
+              #   Gtk) like gramps' GUI launcher, so importing a gramps.gui.*
+              #   module loads the GTK 3 stack rather than warning / risking
+              #   GTK 4 (see scripts/lib/gi_bootstrap + run-addon-unit.sh).
+              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
+                xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+                  python -m xmlrunner "${modules[@]}" \
+                    -o "$out_dir" \
+                    -v
+            ) || rc=$?
+            # Coverage accounting from the JUnit XML: a wholly-skipped module
+            # still exits 0, which exit-code-only would call PASS. Fail it.
+            read -r t s < <(python "$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/junit_coverage.py" "$out_dir")
+            if [ "$rc" -ne 0 ]; then
+              fail=1
+            elif [ "${t:-0}" -gt 0 ] && [ "${s:-0}" -eq "${t:-0}" ]; then
+              echo "::error::$addon: all ${t} tests skipped (degraded coverage)"
+              fail=1
+            fi
           done
           exit $fail
 
@@ -263,6 +287,23 @@ jobs:
           mkdir -p test-results/_po-catalogs
           python -m xmlrunner tests.test_addon_po_catalogs \
             -o test-results/_po-catalogs -v
+
+      - name: Validate addon system dependencies
+        # Every requires_gi / requires_exe an addon declares must be mapped in
+        # scripts/lib/addon_system_deps.py (so the apt list above stays in
+        # sync), and every such dep of a *tested* addon must be present in this
+        # environment. Guards against the per-platform drift that previously
+        # left graphviz out of the image. GRAMPS_TESTBED enables the presence
+        # check (this is the official CI environment).
+        if: always()
+        working-directory: gramps-testbed
+        env:
+          ADDONS_SOURCE: ${{ github.workspace }}/addons-source
+          GRAMPS_TESTBED: ubuntu
+        run: |
+          mkdir -p test-results/_system-deps
+          python -m xmlrunner tests.test_addon_system_deps \
+            -o test-results/_system-deps -v
 
       - name: Upload test results
         if: always()

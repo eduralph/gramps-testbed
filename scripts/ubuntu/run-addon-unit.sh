@@ -148,7 +148,15 @@ PY
         lang=$(basename "$po" .po)
         dest="/workspace/gramps/build/mo/$lang/LC_MESSAGES"
         mkdir -p "$dest"
-        msgfmt "$po" -o "$dest/gramps.mo"
+        # A single malformed upstream catalog (e.g. po/mn.po with mismatched
+        # plural \n entries) must not abort the addon-unit run under set -e
+        # before any test executes. Skip it, drop any partial .mo, and carry
+        # on — that locale just falls back to English, which does not affect
+        # the addon test suites. Mirrors run-manual.sh.
+        if ! msgfmt "$po" -o "$dest/gramps.mo" 2>/dev/null; then
+          echo "  ⚠ skipping $lang — msgfmt rejected $po (malformed catalog)"
+          rm -f "$dest/gramps.mo"
+        fi
       done
     fi
 
@@ -233,24 +241,48 @@ PY
       run_log="$out_dir/_run.log"
       (
         cd /workspace/addons-source
+        # Run under Xvfb (mirrors run-interface.sh). Some addons import Gtk
+        # modules that create a style context at import time, which needs a
+        # display connection; without one the interpreter aborts with a
+        # Gtk-ERROR about being unable to create a GtkStyleContext, rather
+        # than letting the import guard in the test skip cleanly. Headless
+        # addon tests are unaffected by the extra display.
+        # (No raw apostrophes in this block: it runs inside docker bash -c.)
+        # PYTHONPATH prepends scripts/lib/gi_bootstrap, whose sitecustomize pins
+        # the GI versions (Pango/PangoCairo/Gtk) the way the gramps GUI launcher
+        # does, so an addon test importing a gramps.gui.* module loads the
+        # supported GTK 3 stack instead of emitting a PyGIWarning / risking GTK 4
+        # on a host where it is the default. Silent-skip detection below is the
+        # backstop for runs that skip for any other reason.
         GRAMPS_RESOURCES=/workspace/gramps \
-          python3 -m xmlrunner "${modules[@]}" \
-            -o "$out_dir" \
-            -v
+          PYTHONPATH="/workspace/gramps-testbed/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+            python3 -m xmlrunner "${modules[@]}" \
+              -o "$out_dir" \
+              -v
       ) 2>&1 | tee "$run_log"
       rc=${PIPESTATUS[0]}
-      # Parse "Ran N tests in Xs" and the trailing OK/FAILED line to build
-      # a one-line summary entry. Tolerant of Python-exception aborts that
-      # produce no "Ran" line at all (ran stays "?").
-      ran=$(grep -oE "Ran [0-9]+ tests" "$run_log" | tail -n 1 | grep -oE "[0-9]+" || true)
-      ran="${ran:-?}"
-      if [ "$rc" -eq 0 ]; then
-        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests)" "$addon" "$ran")" )
-      else
+      # Coverage accounting from the JUnit XML, not the exit code: a run where
+      # every test SKIPPED still exits 0, so exit-code-only would mark an
+      # all-skipped addon PASS (8 tests) — visually identical to 8 that ran.
+      # Read tests/skipped from the XML and treat a wholly-skipped module as a
+      # failure (almost never intended — usually a missing dep / wrong version
+      # pin laundered into a skip).
+      coverage=$(python3 /workspace/gramps-testbed/scripts/lib/junit_coverage.py "$out_dir")
+      ran="${coverage% *}"; skipped="${coverage#* }"
+      ran="${ran:-0}"; skipped="${skipped:-0}"
+      if [ "$rc" -ne 0 ]; then
         fail=1
         detail=$(grep -oE "FAILED \([^)]*\)" "$run_log" | tail -n 1 || true)
         detail="${detail:-crashed}"
         summary_lines+=( "$(printf "  %-30s  FAIL  (%s tests, %s)" "$addon" "$ran" "$detail")" )
+      elif [ "$ran" -gt 0 ] && [ "$skipped" -eq "$ran" ]; then
+        fail=1
+        summary_lines+=( "$(printf "  %-30s  FAIL  (all %s tests skipped)" "$addon" "$ran")" )
+      elif [ "$skipped" -gt 0 ]; then
+        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests, %s skipped)" "$addon" "$ran" "$skipped")" )
+      else
+        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests)" "$addon" "$ran")" )
       fi
     done
 
@@ -275,6 +307,28 @@ PY
     else
       fail=1
       summary_lines+=( "$(printf "  %-30s  FAIL  (see _po-catalogs/_run.log)" "po-catalogs")" )
+    fi
+
+    # System-dependency drift gate: every requires_gi / requires_exe an addon
+    # declares must be mapped in scripts/lib/addon_system_deps.py, and every
+    # such dep of a tested addon must be present in this image (GRAMPS_TESTBED
+    # is set in the image so the presence check runs). Catches the per-platform
+    # drift that left graphviz/`dot` out of the image.
+    echo
+    echo "=== addon system dependencies ==="
+    sysdeps_out="$results_dir/_system-deps"
+    mkdir -p "$sysdeps_out"
+    sysdeps_log="$sysdeps_out/_run.log"
+    (
+      cd /workspace/gramps-testbed
+      ADDONS_SOURCE=/workspace/addons-source \
+        python3 -m xmlrunner tests.test_addon_system_deps -o "$sysdeps_out" -v
+    ) 2>&1 | tee "$sysdeps_log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      summary_lines+=( "$(printf "  %-30s  PASS" "system-deps")" )
+    else
+      fail=1
+      summary_lines+=( "$(printf "  %-30s  FAIL  (see _system-deps/_run.log)" "system-deps")" )
     fi
 
     echo

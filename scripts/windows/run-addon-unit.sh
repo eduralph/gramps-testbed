@@ -54,6 +54,13 @@ PACMAN_PKGS=(
   mingw-w64-ucrt-x86_64-python-maturin
   mingw-w64-ucrt-x86_64-rust
   mingw-w64-ucrt-x86_64-gtk3
+  # Addon system deps (requires_gi). These are the Windows packages mapped in
+  # scripts/lib/addon_system_deps.py — the single source shared with the Ubuntu
+  # image. Keep them equal to `addon_system_deps.py --platform windows`
+  # (the drift-guard test_addon_system_deps enforces every dep is mapped).
+  # Not derived inline here because the MSYS2 bootstrap installs python via
+  # this very list, so python is not yet available to run the deriver; wiring
+  # that two-phase install is a follow-up (needs a Windows host to verify).
   mingw-w64-ucrt-x86_64-osm-gps-map
   mingw-w64-ucrt-x86_64-goocanvas
   mingw-w64-ucrt-x86_64-gexiv2
