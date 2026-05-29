@@ -1,0 +1,316 @@
+#!/usr/bin/env python3
+"""publish -- push managed Markdown pages to the Gramps wiki.
+
+Repo is the source of truth; the wiki is a render target. One-way.
+
+Safety model (the load-bearing part):
+  * Only pages with `managed: true` front-matter are ever touched.
+  * DRY-RUN IS THE DEFAULT. It prints a plan and pushes nothing. `--apply` opts
+    in to actually editing the live community wiki.
+  * Drift detection: each push records the resulting revid in a sidecar under
+    the state dir. Before re-pushing, the live revid is compared to the recorded
+    one. If they differ, a HUMAN edited the page since our last push -- we STOP
+    on that page (warn, skip) rather than clobber, unless `--force`.
+  * Drift is keyed on REVID, not content hash, so MediaWiki's save-time
+    normalisation never reads as false drift.
+  * Change detection (whether to push at all) is keyed on a content hash of the
+    generated wikitext, so unchanged sources are SKIPped -- no null edits
+    flooding Recent Changes.
+  * Pushes pass basetimestamp/starttimestamp so a concurrent human edit between
+    our read and our write fails with editconflict instead of overwriting.
+
+Usage:
+  python3 publish.py                      # dry-run plan over all managed pages
+  python3 publish.py --apply              # actually push
+  python3 publish.py --apply --force      # push even over drift / adopt
+  python3 publish.py --docs-root pages/content --state-dir .wikisync
+  python3 publish.py --filter addon       # only sources whose path contains 'addon'
+  python3 publish.py --no-login           # skip the interactive-login pause
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import hashlib
+import json
+import os
+import sys
+import time
+from dataclasses import dataclass
+
+import md2wiki
+
+# Actions
+CREATE = "CREATE"
+UPDATE = "UPDATE"
+SKIP = "SKIP"
+DRIFT = "DRIFT"
+ADOPT_CONFLICT = "ADOPT-CONFLICT"
+DELETED_ON_WIKI = "DELETED-ON-WIKI"
+
+
+def sha256(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def decide(
+    *,
+    sidecar: dict | None,
+    live_exists: bool,
+    live_revid: int | None,
+    generated_hash: str,
+) -> tuple[str, str]:
+    """Pure decision: what should happen to this page? Returns (action, reason).
+    --force handling lives in the caller; this reports the true state."""
+    if sidecar is None:
+        if not live_exists:
+            return CREATE, "no local record, not on wiki -> create"
+        return ADOPT_CONFLICT, (
+            "no local record but page EXISTS on wiki -- "
+            "created/owned elsewhere; refusing to adopt"
+        )
+    # we have published this page before
+    if not live_exists:
+        return DELETED_ON_WIKI, "we published it, but it's gone from the wiki now"
+    if live_revid != sidecar.get("pushed_revid"):
+        return DRIFT, (
+            f"wiki revid {live_revid} != our recorded "
+            f"{sidecar.get('pushed_revid')} -- edited since our push"
+        )
+    if generated_hash == sidecar.get("generated_hash"):
+        return SKIP, "source unchanged since last push"
+    return UPDATE, "source changed, wiki untouched since our push -> update"
+
+
+# ---- sidecar state ----------------------------------------------------------
+
+
+def sidecar_path(state_dir: str, docs_root: str, source: str) -> str:
+    rel = os.path.relpath(source, docs_root)
+    return os.path.join(state_dir, rel + ".json")
+
+
+def load_sidecar(path: str) -> dict | None:
+    if not os.path.exists(path):
+        return None
+    with open(path, encoding="utf-8") as f:
+        return json.load(f)
+
+
+def save_sidecar(path: str, data: dict) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+        f.write("\n")
+
+
+# ---- planning ---------------------------------------------------------------
+
+
+@dataclass
+class PlanItem:
+    source: str
+    title: str
+    action: str
+    reason: str
+    page: md2wiki.ConvertedPage
+    generated_hash: str
+    live: object = None  # LivePage when a transport was used
+
+
+def discover(docs_root: str, filt: str | None) -> list[str]:
+    paths = sorted(glob.glob(os.path.join(docs_root, "**", "*.md"), recursive=True))
+    # Belt-and-braces: never publish anything under a templates/ subtree, even if
+    # someone overrides --docs-root to a parent that contains one. Templates ship
+    # with managed: true so a freshly-copied page is push-ready; that same flag
+    # would make the template itself pushable if it slipped into discovery.
+    paths = [p for p in paths if f"{os.sep}templates{os.sep}" not in p]
+    if filt:
+        paths = [p for p in paths if filt in p]
+    return paths
+
+
+def provenance_summary() -> str:
+    sha = os.environ.get("GIT_SHA")
+    if not sha:
+        sha = _git_short_sha()
+    return f"Synced from repo{('@' + sha) if sha else ''} via publish.py"
+
+
+def _git_short_sha() -> str | None:
+    try:
+        import subprocess
+
+        out = subprocess.run(
+            ["git", "rev-parse", "--short", "HEAD"], capture_output=True, text=True
+        )
+        return out.stdout.strip() or None
+    except Exception:
+        return None
+
+
+def build_plan(
+    transport, docs_root: str, state_dir: str, filt: str | None
+) -> list[PlanItem]:
+    plan: list[PlanItem] = []
+    for src in discover(docs_root, filt):
+        page = md2wiki.convert_file(src)
+        if not page.managed:
+            continue
+        ghash = sha256(page.wikitext)
+        sc = load_sidecar(sidecar_path(state_dir, docs_root, src))
+        if transport is not None:
+            live = transport.get_page(page.title)
+            action, reason = decide(
+                sidecar=sc,
+                live_exists=live.exists,
+                live_revid=live.revid,
+                generated_hash=ghash,
+            )
+        else:  # offline plan -- can only reason from the sidecar
+            live = None
+            if sc is None:
+                action, reason = CREATE, "no local record (offline; wiki not checked)"
+            elif ghash == sc.get("generated_hash"):
+                action, reason = SKIP, "source unchanged (offline)"
+            else:
+                action, reason = UPDATE, "source changed (offline; drift unchecked)"
+        plan.append(PlanItem(src, page.title, action, reason, page, ghash, live))
+    return plan
+
+
+def print_plan(plan: list[PlanItem]) -> None:
+    width = max((len(p.action) for p in plan), default=6)
+    for p in plan:
+        print(f"  {p.action:<{width}}  {p.title}")
+        print(f"  {'':<{width}}  ({p.source}) {p.reason}")
+    counts: dict[str, int] = {}
+    for p in plan:
+        counts[p.action] = counts.get(p.action, 0) + 1
+    print("\nsummary:", ", ".join(f"{k}={v}" for k, v in sorted(counts.items())))
+
+
+# ---- apply ------------------------------------------------------------------
+
+PUSHABLE = {CREATE, UPDATE}
+FORCEABLE = {DRIFT, ADOPT_CONFLICT, DELETED_ON_WIKI}
+
+
+def apply_plan(
+    transport,
+    plan: list[PlanItem],
+    state_dir: str,
+    docs_root: str,
+    force: bool,
+    bot: bool,
+) -> int:
+    summary = provenance_summary()
+    failures = 0
+    for p in plan:
+        do_push = p.action in PUSHABLE or (force and p.action in FORCEABLE)
+        if not do_push:
+            print(f"  skip  {p.title} [{p.action}]")
+            continue
+        token = transport.csrf_token()
+        create_only = (p.action == CREATE) and not force
+        base_ts = p.live.timestamp if (p.live and p.live.exists) else None
+        start_ts = p.live.curtimestamp if p.live else None
+        result = transport.edit(
+            title=p.title,
+            text=p.page.wikitext,
+            summary=summary,
+            token=token,
+            base_timestamp=base_ts,
+            start_timestamp=start_ts,
+            create_only=create_only,
+            bot=bot,
+        )
+        if "error" in result:
+            failures += 1
+            print(
+                f"  FAIL  {p.title}: {result['error'].get('code')} -> "
+                f"{result['error'].get('info')}"
+            )
+            continue
+        edit = result.get("edit", {})
+        if edit.get("result") != "Success":
+            failures += 1
+            print(f"  FAIL  {p.title}: unexpected response {result}")
+            continue
+        new_revid = edit.get("newrevid") or edit.get("oldrevid")
+        save_sidecar(
+            sidecar_path(state_dir, docs_root, p.source),
+            {
+                "title": p.title,
+                "source": os.path.relpath(p.source, docs_root),
+                "pushed_revid": new_revid,
+                "generated_hash": p.generated_hash,
+                "last_pushed": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            },
+        )
+        print(f"  OK    {p.title} [{p.action}] -> revid {new_revid}")
+    return failures
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser(description="Publish managed Markdown to the wiki.")
+    ap.add_argument("--docs-root", default="pages/content")
+    ap.add_argument("--state-dir", default=".wikisync")
+    ap.add_argument("--filter", dest="filt", default=None)
+    ap.add_argument(
+        "--apply", action="store_true", help="actually push (default: dry-run)"
+    )
+    ap.add_argument(
+        "--force", action="store_true", help="push over drift/adopt/deleted"
+    )
+    ap.add_argument("--no-bot", action="store_true", help="don't flag edits as bot")
+    ap.add_argument(
+        "--no-login", action="store_true", help="skip interactive login pause"
+    )
+    args = ap.parse_args()
+
+    if not os.path.isdir(args.docs_root):
+        sys.exit(f"docs-root not found: {args.docs_root}")
+
+    transport = None
+    pw = browser = None
+    if args.apply:
+        import wikitransport
+
+        pw, browser, transport = wikitransport.connect(
+            interactive_login=not args.no_login
+        )
+        who = transport.userinfo()
+        if who.get("id", 0) == 0 or "anon" in who:
+            pw.stop()
+            sys.exit(f"Not logged in (userinfo={who}). Log into the wiki first.")
+        print(f"Authenticated as {who.get('name')} (id {who.get('id')})\n")
+
+    try:
+        plan = build_plan(transport, args.docs_root, args.state_dir, args.filt)
+        if not plan:
+            print("No managed pages found.")
+            return
+        print_plan(plan)
+        if not args.apply:
+            print("\n(dry-run -- nothing pushed. Re-run with --apply to push.)")
+            return
+        print("\napplying:")
+        failures = apply_plan(
+            transport,
+            plan,
+            args.state_dir,
+            args.docs_root,
+            force=args.force,
+            bot=not args.no_bot,
+        )
+        if failures:
+            sys.exit(f"\n{failures} page(s) failed.")
+    finally:
+        if pw is not None:
+            pw.stop()
+
+
+if __name__ == "__main__":
+    main()

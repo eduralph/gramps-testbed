@@ -1,0 +1,10 @@
+# Local editor / agent state — not source. The content tree under pages/ is
+# kept transport-agnostic (see README); these are per-workstation artifacts:
+#   .obsidian/  — Obsidian vault config (set Templates folder to pages/templates)
+#   .claude/    — local Claude Code settings for the vault
+#   .claudian/  — Claudian plugin data + saved sessions
+pages/.obsidian/
+pages/.claude/
+pages/.claudian/
+
+# Publish state in .wikisync/ IS committed (one sidecar per page) — do not ignore it.
