@@ -1,0 +1,700 @@
+From faa1a105860144fe1ea5b91c85f2ff6551dbc45d Mon Sep 17 00:00:00 2001
+From: Eduard Ralph <eduard@ralphovi.net>
+Date: Mon, 25 May 2026 13:07:07 +0200
+Subject: [PATCH] Delete RebuildTypes addon per author's request
+
+`RebuildTypes/RebuildTypes.gpr.py` declares
+`include_in_listing=False`, `status=UNSTABLE`, `category=TOOL_DBFIX`
+and `authors=["Nick Hall"]` - it is not published to users and is
+flagged as a database-modifying tool that may corrupt data. The
+addon also carried two stale Gramps-3 era pre-namespace imports
+(`from gui.plug import tool`, `from QuestionDialog import OkDialog`)
+that broke plugin registration on Python 3, so a load-time fix
+would have been needed to revive it.
+
+On PR https://github.com/gramps-project/addons-source/pull/877
+(closed 2026-05-15, the prior port attempt) the addon's author and
+the project maintainer agreed to drop it rather than port:
+
+  Nick-Hall: "The RebuildTypes addon was either just an example or
+  written for a particular person to fix a bug. An export followed
+  by an import will achieve the same result. The Type Cleanup tool
+  may also be a better option. I am happy for this addon to be
+  deleted."
+
+  GaryGriffin: "Seeing TOOL_DBFIX and UNSTABLE together is scary
+  for a released addon."
+
+Replace the dead/dangerous addon with its absence. Users needing
+the same outcome have two supported alternatives Nick named:
+
+  - export / re-import (rebuilds the type catalogue as a side
+    effect of the round-trip)
+  - the Type Cleanup tool (which is published and maintained)
+
+No listing impact - the addon was already `include_in_listing=False`,
+so `addons/gramps*/listings/addons-*.json` did not reference it; no
+other tree references it either (`grep -rn RebuildTypes` on
+`upstream/maintenance/gramps60` returns hits only inside the
+`RebuildTypes/` directory itself).
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+---
+ RebuildTypes/RebuildTypes.gpr.py | 39 --------------
+ RebuildTypes/RebuildTypes.py     | 90 --------------------------------
+ RebuildTypes/po/da-local.po      | 28 ----------
+ RebuildTypes/po/de-local.po      | 28 ----------
+ RebuildTypes/po/es-local.po      | 28 ----------
+ RebuildTypes/po/fi-local.po      | 29 ----------
+ RebuildTypes/po/fr-local.po      | 28 ----------
+ RebuildTypes/po/hr-local.po      | 29 ----------
+ RebuildTypes/po/nb-local.po      | 20 -------
+ RebuildTypes/po/nl-local.po      | 28 ----------
+ RebuildTypes/po/pt_PT-local.po   | 28 ----------
+ RebuildTypes/po/ru-local.po      | 30 -----------
+ RebuildTypes/po/sk-local.po      | 28 ----------
+ RebuildTypes/po/sv-local.po      | 28 ----------
+ RebuildTypes/po/template.pot     | 35 -------------
+ RebuildTypes/po/uk-local.po      | 29 ----------
+ 16 files changed, 525 deletions(-)
+ delete mode 100644 RebuildTypes/RebuildTypes.gpr.py
+ delete mode 100644 RebuildTypes/RebuildTypes.py
+ delete mode 100644 RebuildTypes/po/da-local.po
+ delete mode 100644 RebuildTypes/po/de-local.po
+ delete mode 100644 RebuildTypes/po/es-local.po
+ delete mode 100644 RebuildTypes/po/fi-local.po
+ delete mode 100644 RebuildTypes/po/fr-local.po
+ delete mode 100644 RebuildTypes/po/hr-local.po
+ delete mode 100644 RebuildTypes/po/nb-local.po
+ delete mode 100755 RebuildTypes/po/nl-local.po
+ delete mode 100644 RebuildTypes/po/pt_PT-local.po
+ delete mode 100644 RebuildTypes/po/ru-local.po
+ delete mode 100644 RebuildTypes/po/sk-local.po
+ delete mode 100644 RebuildTypes/po/sv-local.po
+ delete mode 100644 RebuildTypes/po/template.pot
+ delete mode 100644 RebuildTypes/po/uk-local.po
+
+diff --git a/RebuildTypes/RebuildTypes.gpr.py b/RebuildTypes/RebuildTypes.gpr.py
+deleted file mode 100644
+index e6d31780f..000000000
+--- a/RebuildTypes/RebuildTypes.gpr.py
++++ /dev/null
+@@ -1,39 +0,0 @@
+-#
+-# Gramps - a GTK+/GNOME based genealogy program
+-#
+-# Copyright (C) 2013        Nick Hall
+-#
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-#
+-
+-# $Id: RebuildTypes.gpr.py 2374 2014-05-02 13:29:19Z romjerome $
+-
+-register(
+-    TOOL,
+-    id="rebuild_types",
+-    name=_("Rebuild Gramps Types"),
+-    description=_("Rebuilds Gramps Types"),
+-    version = '1.0.21',
+-    gramps_target_version="6.0",
+-    include_in_listing=False,
+-    status=UNSTABLE,
+-    fname="RebuildTypes.py",
+-    authors=["Nick Hall"],
+-    authors_email=["nick__hall@hotmail.com"],
+-    category=TOOL_DBFIX,
+-    toolclass="RebuildTypes",
+-    optionclass="RebuildTypesOptions",
+-    tool_modes=[TOOL_MODE_GUI, TOOL_MODE_CLI],
+-)
+diff --git a/RebuildTypes/RebuildTypes.py b/RebuildTypes/RebuildTypes.py
+deleted file mode 100644
+index 5aecf5e5e..000000000
+--- a/RebuildTypes/RebuildTypes.py
++++ /dev/null
+@@ -1,90 +0,0 @@
+-#
+-# Gramps - a GTK+/GNOME based genealogy program
+-#
+-# Copyright (C) 2013        Nick Hall
+-#
+-# This program is free software; you can redistribute it and/or modify
+-# it under the terms of the GNU General Public License as published by
+-# the Free Software Foundation; either version 2 of the License, or
+-# (at your option) any later version.
+-#
+-# This program is distributed in the hope that it will be useful,
+-# but WITHOUT ANY WARRANTY; without even the implied warranty of
+-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+-# GNU General Public License for more details.
+-#
+-# You should have received a copy of the GNU General Public License
+-# along with this program; if not, write to the Free Software
+-# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
+-#
+-
+-# $Id: RebuildTypes.py 2228 2013-10-17 16:46:53Z romjerome $
+-
+-"""Tools/Database Processing/Rebuild Types"""
+-
+-
+-#-------------------------------------------------------------------------
+-#
+-# GRAMPS modules
+-#
+-#-------------------------------------------------------------------------
+-from gui.plug import tool
+-from QuestionDialog import OkDialog
+-
+-from gramps.gen.const import GRAMPS_LOCALE as glocale
+-try:
+-    _trans = glocale.get_addon_translator(__file__)
+-except ValueError:
+-    _trans = glocale.translation
+-_ = _trans.gettext
+-
+-#-------------------------------------------------------------------------
+-#
+-# RebuildTypes
+-#
+-#-------------------------------------------------------------------------
+-class RebuildTypes(tool.Tool):
+-    """
+-    Rebuild Gramps Types
+-    """
+-
+-    def __init__(self, dbstate, uistate, options_class, name, callback=None):
+-
+-        tool.Tool.__init__(self, dbstate, options_class, name)
+-
+-        if self.db.readonly:
+-            return
+-
+-        person_event_types = []
+-        family_event_types = []
+-        for handle in self.db.get_event_handles():
+-            event = self.db.get_event_from_handle(handle)
+-            if event.get_type().is_custom():
+-                links = [x[0] for x in self.db.find_backlink_handles(handle)]
+-                type_str = str(event.get_type())
+-                if 'Person' in links and type_str not in person_event_types:
+-                    person_event_types.append(type_str)
+-                if 'Family' in links and type_str not in family_event_types:
+-                    family_event_types.append(type_str)
+-
+-        self.db.individual_event_names.update(person_event_types)
+-        self.db.family_event_names.update(family_event_types)
+-
+-        total = len(person_event_types) + len(family_event_types)
+-
+-        OkDialog(_("Gramps Types rebuilt"),
+-                 _('Found %d custom event types') % total,
+-                 parent=uistate.window)
+-
+-#------------------------------------------------------------------------
+-#
+-# RebuildTypesOptions
+-#
+-#------------------------------------------------------------------------
+-class RebuildTypesOptions(tool.ToolOptions):
+-    """
+-    Defines options and provides handling interface.
+-    """
+-
+-    def __init__(self, name, person_id=None):
+-        tool.ToolOptions.__init__(self, name, person_id)
+diff --git a/RebuildTypes/po/da-local.po b/RebuildTypes/po/da-local.po
+deleted file mode 100644
+index 2695e6e62..000000000
+--- a/RebuildTypes/po/da-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: \n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-02-25 16:12+0000\n"
+-"Last-Translator: Kaj Arne Mikkelsen <kmi@vgdata.dk>\n"
+-"Language-Team: Danish <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/da/>\n"
+-"Language: da\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.10.2-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Gendan Gramps typer"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Gendanner Gramps typer"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Gramps typer er gendannet"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Fandt  %d tilpassede hændelsestyper"
+diff --git a/RebuildTypes/po/de-local.po b/RebuildTypes/po/de-local.po
+deleted file mode 100644
+index a887bd299..000000000
+--- a/RebuildTypes/po/de-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: de\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-10-26 23:02+0000\n"
+-"Last-Translator: Mirko Leonhäuser <mirko@leonhaeuser.de>\n"
+-"Language-Team: German <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/de/>\n"
+-"Language: de\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.14.1-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Gramps-Typen neu erstellen"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Erneuert Gramps-Typen"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Gramps-Typen neu erstellt"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "%d benutzerdefinierte Ereignisarten gefunden"
+diff --git a/RebuildTypes/po/es-local.po b/RebuildTypes/po/es-local.po
+deleted file mode 100644
+index 8a386a7c8..000000000
+--- a/RebuildTypes/po/es-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: GRAMPS 3.1\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2026-05-04 21:37+0000\n"
+-"Last-Translator: Francisco Serrador <fserrador@gmail.com>\n"
+-"Language-Team: Spanish <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/es/>\n"
+-"Language: es\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.17.1\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Reconstruir Tipos de Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Reconstruye Tipos Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Reconstruir Tipos Gramps"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Se encontraron %d tipos de evento personales"
+diff --git a/RebuildTypes/po/fi-local.po b/RebuildTypes/po/fi-local.po
+deleted file mode 100644
+index 53f3a621a..000000000
+--- a/RebuildTypes/po/fi-local.po
++++ /dev/null
+@@ -1,29 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: fi\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-09-03 21:58+0000\n"
+-"Last-Translator: Matti Niemelä <matti.u.niemela@gmail.com>\n"
+-"Language-Team: Finnish <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/fi/>\n"
+-"Language: fi\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.13.1-rc\n"
+-"Generated-By: pygettext.py 1.4\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Rakenetaan Gramps-tyypit uudelleen"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Rakenna Gramps-tyypit uudelleen"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Gramps-tyypit rakennettu uudelleen"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Löytyi %d mukautettua tapahtumatyyppiä"
+diff --git a/RebuildTypes/po/fr-local.po b/RebuildTypes/po/fr-local.po
+deleted file mode 100644
+index 35f805b13..000000000
+--- a/RebuildTypes/po/fr-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: trunk\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-03-02 13:48+0000\n"
+-"Last-Translator: Julien Lepiller <roptat@lepiller.eu>\n"
+-"Language-Team: French <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/fr/>\n"
+-"Language: fr\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=(n!=1);\n"
+-"X-Generator: Weblate 5.10.3-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Reconstruire les types Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Reconstruit les types Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Les types Gramps reconstruits"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Trouvé %d type(s) d'événement personnalisé(s)"
+diff --git a/RebuildTypes/po/hr-local.po b/RebuildTypes/po/hr-local.po
+deleted file mode 100644
+index 84a01cb7c..000000000
+--- a/RebuildTypes/po/hr-local.po
++++ /dev/null
+@@ -1,29 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: Gramps 5.x\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2026-04-08 15:09+0000\n"
+-"Last-Translator: Milo Ivir <mail@milotype.de>\n"
+-"Language-Team: Croatian <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/hr/>\n"
+-"Language: hr\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.17-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Ponovo izgradi Grampsove vrste"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Ponovo izgrađuje Grampsove vrste"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Grampsove vrste su ponovo izgrađene"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Broj pronađenih vrsta prilagođenih događaja: %d"
+diff --git a/RebuildTypes/po/nb-local.po b/RebuildTypes/po/nb-local.po
+deleted file mode 100644
+index 4e4278f53..000000000
+--- a/RebuildTypes/po/nb-local.po
++++ /dev/null
+@@ -1,20 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: nb\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-02-26 20:54+0000\n"
+-"Last-Translator: Harald Herreros <h.herreros@proton.me>\n"
+-"Language-Team: Norwegian Bokmål <https://hosted.weblate.org/projects/gramps-"
+-"project/addons/nb_NO/>\n"
+-"Language: nb\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.10.2-dev\n"
+-"Generated-By: pygettext.py 1.4\n"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Fant %d tilpassede hendelsestyper"
+diff --git a/RebuildTypes/po/nl-local.po b/RebuildTypes/po/nl-local.po
+deleted file mode 100755
+index 560c13403..000000000
+--- a/RebuildTypes/po/nl-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: MediaMerge 5.x\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-03-07 06:31+0000\n"
+-"Last-Translator: Stephan Paternotte <stephan@paternottes.net>\n"
+-"Language-Team: Dutch <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/nl/>\n"
+-"Language: nl\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.10.3-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Herbouw Gramps-typen"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Herbouwt Gramps-typen"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Herbouwde Gramps-typen"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "%d aangepaste gebeurtenistypen gevonden"
+diff --git a/RebuildTypes/po/pt_PT-local.po b/RebuildTypes/po/pt_PT-local.po
+deleted file mode 100644
+index 2e0407c47..000000000
+--- a/RebuildTypes/po/pt_PT-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: gramps51\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-03-08 07:05+0000\n"
+-"Last-Translator: Pedro Albuquerque <pmra@protonmail.com>\n"
+-"Language-Team: Portuguese (Portugal) <https://hosted.weblate.org/projects/"
+-"gramps-project/addons/pt_PT/>\n"
+-"Language: pt_PT\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.10.3-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Reconstruir tipos do Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Reconstrói tipos do Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Tipos do Gramps reconstruídos"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Encontrados %d tipos de eventos personalizados"
+diff --git a/RebuildTypes/po/ru-local.po b/RebuildTypes/po/ru-local.po
+deleted file mode 100644
+index b14a851a7..000000000
+--- a/RebuildTypes/po/ru-local.po
++++ /dev/null
+@@ -1,30 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: gramps50\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2018-12-04 16:36+0300\n"
+-"Last-Translator: Ivan Komaritsyn <vantu5z@mail.ru>\n"
+-"Language-Team: Russian\n"
+-"Language: ru\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"X-Generator: Gtranslator 2.91.7\n"
+-"X-Poedit-Language: Russian\n"
+-"X-Poedit-Country: RUSSIAN FEDERATION\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2)\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Перестроение типов Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Перестраивает типы Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Перестроение типов Gramps"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Найдено пользовательских типов событий: %d"
+diff --git a/RebuildTypes/po/sk-local.po b/RebuildTypes/po/sk-local.po
+deleted file mode 100644
+index 6aea16a5f..000000000
+--- a/RebuildTypes/po/sk-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: GRAMPS 3.1.3\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2026-05-11 10:34+0000\n"
+-"Last-Translator: Milan <mobrcian@hotmail.com>\n"
+-"Language-Team: Slovak <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/sk/>\n"
+-"Language: sk\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=((n==1) ? 0 : (n>=2 && n<=4) ? 1 : 2);\n"
+-"X-Generator: Weblate 2026.5-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Obnovenie typov Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Obnovuje typy v Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Typy v Gramps boli obnovené"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Nájdených %d vlastných typov udalostí"
+diff --git a/RebuildTypes/po/sv-local.po b/RebuildTypes/po/sv-local.po
+deleted file mode 100644
+index ee452c5e0..000000000
+--- a/RebuildTypes/po/sv-local.po
++++ /dev/null
+@@ -1,28 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: \n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-03-06 17:38+0000\n"
+-"Last-Translator: Pär Ekholm <github1@m.pekholm.org>\n"
+-"Language-Team: Swedish <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/sv/>\n"
+-"Language: sv\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=2; plural=n != 1;\n"
+-"X-Generator: Weblate 5.10.3-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Återuppbygg Grampstyper"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Återuppbygger Grampstyper"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Grampstyper återuppbyggda"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Fann %d anpassade händelsetyper"
+diff --git a/RebuildTypes/po/template.pot b/RebuildTypes/po/template.pot
+deleted file mode 100644
+index 8c7b7fd98..000000000
+--- a/RebuildTypes/po/template.pot
++++ /dev/null
+@@ -1,35 +0,0 @@
+-# SOME DESCRIPTIVE TITLE.
+-# Copyright (C) YEAR THE PACKAGE'S COPYRIGHT HOLDER
+-# This file is distributed under the same license as the PACKAGE package.
+-# FIRST AUTHOR <EMAIL@ADDRESS>, YEAR.
+-#
+-#, fuzzy
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: PACKAGE VERSION\n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+-"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+-"Language-Team: LANGUAGE <LL@li.org>\n"
+-"Language: \n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-
+-#: RebuildTypes/RebuildTypes.gpr.py:26
+-msgid "Rebuild Gramps Types"
+-msgstr ""
+-
+-#: RebuildTypes/RebuildTypes.gpr.py:27
+-msgid "Rebuilds Gramps Types"
+-msgstr ""
+-
+-#: RebuildTypes/RebuildTypes.py:75
+-msgid "Gramps Types rebuilt"
+-msgstr ""
+-
+-#: RebuildTypes/RebuildTypes.py:76
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr ""
+diff --git a/RebuildTypes/po/uk-local.po b/RebuildTypes/po/uk-local.po
+deleted file mode 100644
+index 6706084b5..000000000
+--- a/RebuildTypes/po/uk-local.po
++++ /dev/null
+@@ -1,29 +0,0 @@
+-msgid ""
+-msgstr ""
+-"Project-Id-Version: \n"
+-"Report-Msgid-Bugs-To: \n"
+-"POT-Creation-Date: 2025-02-06 08:58-0800\n"
+-"PO-Revision-Date: 2025-03-06 13:57+0000\n"
+-"Last-Translator: Yurii Liubymyi <jurchello@gmail.com>\n"
+-"Language-Team: Ukrainian <https://hosted.weblate.org/projects/gramps-project/"
+-"addons/uk/>\n"
+-"Language: uk\n"
+-"MIME-Version: 1.0\n"
+-"Content-Type: text/plain; charset=UTF-8\n"
+-"Content-Transfer-Encoding: 8bit\n"
+-"Plural-Forms: nplurals=3; plural=(n%10==1 && n%100!=11 ? 0 : n%10>=2 && "
+-"n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
+-"X-Generator: Weblate 5.10.3-dev\n"
+-
+-msgid "Rebuild Gramps Types"
+-msgstr "Перебудова типів Gramps"
+-
+-msgid "Rebuilds Gramps Types"
+-msgstr "Перебудовує типи Gramps"
+-
+-msgid "Gramps Types rebuilt"
+-msgstr "Типи Gramps перебудовано"
+-
+-#, python-format
+-msgid "Found %d custom event types"
+-msgstr "Знайдено %d користувацьких типів подій"
+-- 
+2.53.0
+

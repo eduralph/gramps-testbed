@@ -20,6 +20,11 @@ repos:
       - id: black
         args: ["--check", "--diff"]
         files: \.py$
+        # triage/ holds committed evidence artifacts (one-off repro
+        # scripts captured as-run), not maintained source — exempt from
+        # the source-formatting/lint gates, like triage/data and
+        # triage/notes are from version control.
+        exclude: ^triage/
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.9.6
@@ -31,6 +36,7 @@ repos:
           - --select=E9,F63,F7,F82
           - --no-fix
         files: \.py$
+        exclude: ^triage/
 
   - repo: local
     hooks:
@@ -39,3 +45,4 @@ repos:
         language: system
         entry: python3 -c "import ast,sys;[ast.parse(open(p).read(),p) for p in sys.argv[1:]]"
         files: \.py$
+        exclude: ^triage/

@@ -1,0 +1,247 @@
+From 0daf9b22b713c5665eecd73c12dd8a1bc044da3a Mon Sep 17 00:00:00 2001
+From: Eduard Ralph <eduard@ralphovi.net>
+Date: Sun, 24 May 2026 18:06:20 +0200
+Subject: [PATCH] Requirements.info: omit empty (label, table) pairs.
+
+The previous contract appended a label whenever an addon dict carried
+a "rm" / "rg" / "re" key, regardless of whether the value was a non-
+empty list. Present-but-empty keys - e.g. an addon listing with
+`"re": []` because its .gpr.py declares `requires_exe=[]` - produced
+a labelled section paired with an empty table. Two consequences for
+existing consumers:
+
+* gramps core's AddonManager Requirements dialog
+  (`EnhancedAddonStatus.__on_requires_clicked` in
+  `gramps/gui/plug/_windows.py`) renders the empty table as a
+  labelled section with no rows. The PostgreSQL Enhanced listing
+  surfaces this today: clicking Requires shows an empty
+  "Executables" section after the real Python-modules section.
+
+* The Plugin Manager Enhanced addon's row-click handler indexes
+  `req_lst[0]` on the table and crashed with IndexError on the
+  same shape (Mantis 13979, fixed addon-side in addons-source
+  PR 916). This change tightens the producer side so any other
+  future consumer is shielded too.
+
+Build the table first and append the label + table only if the table
+has entries. Behaviour for non-empty keys is preserved exactly (same
+labels, same table contents, same rm / rg / re order).
+
+Verified on `maintenance/gramps61`:
+
+| input addon dict                                | before                                                                | after                              |
+|-------------------------------------------------|-----------------------------------------------------------------------|------------------------------------|
+| `{}`                                            | `[]`                                                                  | `[]`                               |
+| `{"re": []}`                                    | `["Executables", []]`                                                 | `[]`                               |
+| `{"rm": []}`                                    | `["Python modules", []]`                                              | `[]`                               |
+| `{"rg": []}`                                    | `["GObject introspection modules", []]`                               | `[]`                               |
+| `{"rm": ["psycopg"], "re": []}`                 | `["Python modules", [["psycopg", "X"]], "Executables", []]`           | `["Python modules", [["psycopg", "X"]]]` |
+| `{"rm": [], "rg": [], "re": []}`                | three empty pairs                                                     | `[]`                               |
+
+Known consumers of `Requirements.info` in gramps core: one call site
+in `gramps/gui/plug/_windows.py:349` (the Requirements InfoDialog).
+The addons-source Plugin Manager Enhanced addon
+(`PluginManager/PluginManager.py`) has the only out-of-tree consumer
+in the addons-source repo. Both are improved by the change; the
+addon already guards empty tables defensively, so this is belt-and-
+suspenders for it.
+
+Ships `gramps/gen/utils/test/requirements_test.py` (8 cases): the
+six pre-change shapes (none now emit empty pairs) plus two positive
+cases asserting populated-section behaviour is unchanged (label,
+table contents, rm/rg/re ordering).
+
+Context for Mantis 13979 - that crash is resolved by addons-source
+PR 916; this change is the complementary core-side hardening, not a
+substitute. No tracker action is taken on 13979 here.
+---
+ gramps/gen/utils/requirements.py           |  20 +++-
+ gramps/gen/utils/test/requirements_test.py | 128 +++++++++++++++++++++
+ 2 files changed, 142 insertions(+), 6 deletions(-)
+ create mode 100644 gramps/gen/utils/test/requirements_test.py
+
+diff --git a/gramps/gen/utils/requirements.py b/gramps/gen/utils/requirements.py
+index c46c707d4d..23a32a1368 100644
+--- a/gramps/gen/utils/requirements.py
++++ b/gramps/gen/utils/requirements.py
+@@ -146,29 +146,37 @@ class Requirements:
+     def info(self, addon):
+         """
+         Provide the requirements status of a given addon.
++
++        Returns a flat sequence of alternating label / table entries -
++        one pair per non-empty requires section. Sections whose addon
++        list is present but empty (e.g. ``"re": []``) are omitted, so
++        every label in the result is paired with a non-empty table.
+         """
+         info = []
+         if "rm" in addon:
+-            info.append(_("Python modules"))
+             table = []
+             for module in addon.get("rm"):
+                 result = self.check_mod(module)
+                 table.append([module, tick_cross(result)])
+-            info.append(table)
++            if table:
++                info.append(_("Python modules"))
++                info.append(table)
+         if "rg" in addon:
+-            info.append(_("GObject introspection modules"))
+             table = []
+             for module_spec in addon.get("rg"):
+                 result = self.check_gi(module_spec)
+                 table.append([" ".join(module_spec), tick_cross(result)])
+-            info.append(table)
++            if table:
++                info.append(_("GObject introspection modules"))
++                info.append(table)
+         if "re" in addon:
+-            info.append(_("Executables"))
+             table = []
+             for executable in addon.get("re"):
+                 result = self.check_exe(executable)
+                 table.append([executable, tick_cross(result)])
+-            info.append(table)
++            if table:
++                info.append(_("Executables"))
++                info.append(table)
+         return info
+ 
+ 
+diff --git a/gramps/gen/utils/test/requirements_test.py b/gramps/gen/utils/test/requirements_test.py
+new file mode 100644
+index 0000000000..a4b88c19e3
+--- /dev/null
++++ b/gramps/gen/utils/test/requirements_test.py
+@@ -0,0 +1,128 @@
++#!/usr/bin/env python
++# -*- coding: utf-8 -*-
++#
++# Gramps - a GTK+/GNOME based genealogy program
++#
++# Copyright (C) 2026  Eduard Ralph
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License along
++# with this program; if not, see <https://www.gnu.org/licenses/>.
++#
++
++"""
++Tests for :class:`gramps.gen.utils.requirements.Requirements`.
++"""
++
++# -------------------------------------------------------------------------
++#
++# Standard python modules
++#
++# -------------------------------------------------------------------------
++import unittest
++
++# -------------------------------------------------------------------------
++#
++# Gramps modules
++#
++# -------------------------------------------------------------------------
++from ..requirements import Requirements
++
++
++# ------------------------------------------------------------
++#
++# TestRequirementsInfoOmitsEmptyPairs
++#
++# ------------------------------------------------------------
++class TestRequirementsInfoOmitsEmptyPairs(unittest.TestCase):
++    """
++    ``Requirements.info`` must return only label + populated-table pairs.
++
++    A present-but-empty requires list - e.g. an addon listing carrying
++    ``"re": []`` because its .gpr.py declares ``requires_exe=[]`` - must
++    not produce a labelled section with an empty table. The previous
++    contract emitted the label + empty table, which (a) rendered an
++    empty labelled section in the core Addon Manager's Requirements
++    dialog, and (b) was the shape that crashed the Plugin Manager
++    Enhanced addon's row-click handler (Mantis 13979, fixed
++    addon-side in addons-source PR 916).
++    """
++
++    def setUp(self):
++        self.req = Requirements()
++
++    # ----- single shapes -------------------------------------------------
++
++    def test_no_requires_keys(self):
++        """An addon with no requires keys returns an empty list."""
++        self.assertEqual(self.req.info({"i": "x"}), [])
++
++    def test_present_but_empty_re_omits_pair(self):
++        """``"re": []`` must not produce an ``Executables`` pair."""
++        self.assertEqual(self.req.info({"i": "x", "re": []}), [])
++
++    def test_present_but_empty_rm_omits_pair(self):
++        """``"rm": []`` must not produce a ``Python modules`` pair."""
++        self.assertEqual(self.req.info({"i": "x", "rm": []}), [])
++
++    def test_present_but_empty_rg_omits_pair(self):
++        """``"rg": []`` must not produce a GI pair."""
++        self.assertEqual(self.req.info({"i": "x", "rg": []}), [])
++
++    def test_all_three_present_but_empty_omits_all_pairs(self):
++        """All three keys present-but-empty returns an empty list."""
++        self.assertEqual(
++            self.req.info({"i": "x", "rm": [], "rg": [], "re": []}),
++            [],
++        )
++
++    # ----- the live trigger shape ----------------------------------------
++
++    def test_postgresql_enhanced_listing_shape(self):
++        """
++        The live PostgreSQL Enhanced listing shape - ``rm`` populated,
++        ``re`` empty - must produce only the Python-modules pair, with
++        no trailing Executables pair to crash downstream consumers.
++        """
++        result = self.req.info({"i": "postgresqlenhanced", "rm": ["psycopg"], "re": []})
++        self.assertEqual(len(result), 2, result)
++        label, table = result
++        self.assertIn("Python modules", label)
++        self.assertEqual(len(table), 1)
++        self.assertEqual(table[0][0], "psycopg")
++
++    # ----- positive cases: existing behaviour preserved ------------------
++
++    def test_non_empty_rm_still_renders(self):
++        """A populated ``rm`` still produces its label + table unchanged."""
++        result = self.req.info({"i": "x", "rm": ["psycopg", "Pillow"]})
++        self.assertEqual(len(result), 2, result)
++        label, table = result
++        self.assertIn("Python modules", label)
++        self.assertEqual([row[0] for row in table], ["psycopg", "Pillow"])
++
++    def test_non_empty_rm_and_re_both_render_in_order(self):
++        """
++        Multiple populated sections still emit their pairs in the same
++        rm / rg / re order Requirements.info has always used - the change
++        only suppresses empty sections, it does not reorder anything.
++        """
++        result = self.req.info({"i": "x", "rm": ["psycopg"], "re": ["dot"]})
++        self.assertEqual(len(result), 4, result)
++        self.assertIn("Python modules", result[0])
++        self.assertEqual(result[1][0][0], "psycopg")
++        self.assertIn("Executables", result[2])
++        self.assertEqual(result[3][0][0], "dot")
++
++
++if __name__ == "__main__":
++    unittest.main()
+-- 
+2.53.0
+
