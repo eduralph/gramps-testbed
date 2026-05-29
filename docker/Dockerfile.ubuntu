@@ -19,41 +19,55 @@ ENV DEBIAN_FRONTEND=noninteractive \
     GTK_MODULES=gail:atk-bridge \
     NO_AT_BRIDGE=0
 
+# Base packages: gramps' own stack (gtk, python3-gi, cairo, ...) plus the
+# test harness (xvfb, at-spi). Addon-specific GI typelibs and executables are
+# NOT listed here — they are installed in the next layer from the single-source
+# map (see below) so this base list never drifts from what addons declare.
 RUN apt-get update && apt-get install -y --no-install-recommends \
       python3 python3-pip python3-dev \
       python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
-      gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
+      gir1.2-gtk-3.0 \
       libgirepository1.0-dev \
       xvfb dbus-x11 at-spi2-core \
       xdotool wmctrl \
       gettext intltool \
       librsvg2-common \
-      graphviz \
       git curl ca-certificates \
       fonts-dejavu-core \
       locales language-pack-gnome-en-base \
  && locale-gen en_US.UTF-8 \
  && rm -rf /var/lib/apt/lists/*
 
+# Addon system dependencies (requires_gi typelibs + requires_exe binaries).
+# These are NOT pip-installable, their package names differ per platform, and
+# Gramps' own Requirements only *checks* them (never installs), so they must be
+# in the image. scripts/lib/addon_system_deps.py is the single source mapping
+# each declared dependency to its Ubuntu package; installing the full mapped
+# set here keeps the image generic (any addon reusing one of these works
+# without a rebuild) and prevents the per-platform list drift that previously
+# left graphviz/`dot` out of this image while Windows had it. A new addon
+# dependency means one new row in that map, enforced by
+# tests/test_addon_system_deps.py.
+COPY scripts/lib/addon_system_deps.py /opt/testbed/addon_system_deps.py
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends \
+      $(python3 /opt/testbed/addon_system_deps.py --platform ubuntu) \
+ && rm -rf /var/lib/apt/lists/*
+
 ENV LANG=en_US.UTF-8 \
     LC_ALL=en_US.UTF-8 \
-    LANGUAGE=en_US:en
+    LANGUAGE=en_US:en \
+    GRAMPS_TESTBED=ubuntu
 
 # dogtail + JUnit XML writer for unittest (pyatspi comes from python3-pyatspi apt package).
-# Addon runtime deps (dbf, boto3, networkx, psycopg2, etc.) are NOT baked
-# in here — the run-addon-unit.sh entrypoint auto-derives them at
-# container start from requires_mod declarations in the currently
-# checked-out addons-source/*/*.gpr.py files. That way the image stays
-# generic and the addon dep list is single-sourced from the .gpr.py
-# files (the same data Gramps' Addon Manager consumes for end users).
-#
-# System-level addon deps are the exception: requires_gi (GObject
-# typelibs, e.g. gir1.2-goocanvas-2.0 above) and requires_exe (system
-# binaries, e.g. graphviz providing `dot`) are NOT pip-installable, and
-# Gramps' own Requirements only *checks* them, never installs them — so
-# they must be present in the image. graphviz satisfies the
-# requires_exe=["dot"] declared by GraphView and other graph addons;
-# without it those addons raise at import and their tests silently skip.
+# Addon runtime *Python* deps (dbf, boto3, networkx, psycopg2, etc.) are NOT
+# baked in here — the run-addon-unit.sh entrypoint auto-derives them at
+# container start from requires_mod declarations in the currently checked-out
+# addons-source/*/*.gpr.py files, so the image stays generic and the Python
+# dep list is single-sourced from the .gpr.py files (the same data Gramps'
+# Addon Manager consumes). Addon *system* deps (requires_gi / requires_exe)
+# are the exception and are installed above from addon_system_deps.py, because
+# they are not pip-installable and Gramps only checks, never installs, them.
 RUN pip3 install --break-system-packages --no-cache-dir \
       dogtail \
       unittest-xml-reporting

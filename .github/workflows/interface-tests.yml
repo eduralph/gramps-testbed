@@ -93,15 +93,18 @@ jobs:
         # from the system interpreter.
         run: |
           sudo apt-get update
+          # Base stack + addon system deps derived from the single-source map
+          # (scripts/lib/addon_system_deps.py); gir1.2-gtk-3.0 is gramps' base.
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
-            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
+            gir1.2-gtk-3.0 \
             libgirepository1.0-dev \
             xvfb dbus-x11 at-spi2-core \
             xdotool wmctrl \
             gettext intltool \
-            librsvg2-common
+            librsvg2-common \
+            $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
 
       - name: Set up Python venv (inherits python3-gi / python3-pyatspi from apt)
         # Ubuntu 24.04's apt python3-gi and python3-pyatspi install into

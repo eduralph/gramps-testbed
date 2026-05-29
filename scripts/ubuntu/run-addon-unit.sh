@@ -293,6 +293,28 @@ PY
       summary_lines+=( "$(printf "  %-30s  FAIL  (see _po-catalogs/_run.log)" "po-catalogs")" )
     fi
 
+    # System-dependency drift gate: every requires_gi / requires_exe an addon
+    # declares must be mapped in scripts/lib/addon_system_deps.py, and every
+    # such dep of a tested addon must be present in this image (GRAMPS_TESTBED
+    # is set in the image so the presence check runs). Catches the per-platform
+    # drift that left graphviz/`dot` out of the image.
+    echo
+    echo "=== addon system dependencies ==="
+    sysdeps_out="$results_dir/_system-deps"
+    mkdir -p "$sysdeps_out"
+    sysdeps_log="$sysdeps_out/_run.log"
+    (
+      cd /workspace/gramps-testbed
+      ADDONS_SOURCE=/workspace/addons-source \
+        python3 -m xmlrunner tests.test_addon_system_deps -o "$sysdeps_out" -v
+    ) 2>&1 | tee "$sysdeps_log"
+    if [ "${PIPESTATUS[0]}" -eq 0 ]; then
+      summary_lines+=( "$(printf "  %-30s  PASS" "system-deps")" )
+    else
+      fail=1
+      summary_lines+=( "$(printf "  %-30s  FAIL  (see _system-deps/_run.log)" "system-deps")" )
+    fi
+
     echo
     echo "=== Summary ==="
     for line in "${summary_lines[@]}"; do

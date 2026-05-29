@@ -81,13 +81,17 @@ jobs:
         # interpreter.
         run: |
           sudo apt-get update
+          # Base stack + addon system deps derived from the single-source map
+          # (scripts/lib/addon_system_deps.py) — keeps this list from drifting
+          # from what addons declare. gir1.2-gtk-3.0 is gramps' own base dep.
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-icu \
-            gir1.2-gtk-3.0 gir1.2-osmgpsmap-1.0 gir1.2-goocanvas-2.0 gir1.2-gexiv2-0.10 \
+            gir1.2-gtk-3.0 \
             libgirepository1.0-dev \
             gettext intltool \
-            librsvg2-common
+            librsvg2-common \
+            $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
 
       - name: Set up Python venv (inherits python3-gi from apt)
         # See unit-tests.yml for rationale — apt-installed PyGObject is
@@ -263,6 +267,23 @@ jobs:
           mkdir -p test-results/_po-catalogs
           python -m xmlrunner tests.test_addon_po_catalogs \
             -o test-results/_po-catalogs -v
+
+      - name: Validate addon system dependencies
+        # Every requires_gi / requires_exe an addon declares must be mapped in
+        # scripts/lib/addon_system_deps.py (so the apt list above stays in
+        # sync), and every such dep of a *tested* addon must be present in this
+        # environment. Guards against the per-platform drift that previously
+        # left graphviz out of the image. GRAMPS_TESTBED enables the presence
+        # check (this is the official CI environment).
+        if: always()
+        working-directory: gramps-testbed
+        env:
+          ADDONS_SOURCE: ${{ github.workspace }}/addons-source
+          GRAMPS_TESTBED: ubuntu
+        run: |
+          mkdir -p test-results/_system-deps
+          python -m xmlrunner tests.test_addon_system_deps \
+            -o test-results/_system-deps -v
 
       - name: Upload test results
         if: always()
