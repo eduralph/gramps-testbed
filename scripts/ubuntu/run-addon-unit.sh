@@ -248,25 +248,43 @@ PY
         # than letting the import guard in the test skip cleanly. Headless
         # addon tests are unaffected by the extra display.
         # (No raw apostrophes in this block: it runs inside docker bash -c.)
+        # PYTHONPATH prepends scripts/lib/strictgiwarn, whose sitecustomize
+        # promotes PyGIWarning to an error so an addon that imports a GI module
+        # without pinning its version fails loudly instead of degrading to a
+        # silent all-skip on a differently-defaulted Gdk host.
+        # The -W flag is load-bearing despite ImportWarning being irrelevant:
+        # python -m unittest / xmlrunner force warnings.simplefilter("default")
+        # (wiping the sitecustomize error filter) UNLESS sys.warnoptions is
+        # non-empty, so a harmless -W keeps that filter alive during the run.
         GRAMPS_RESOURCES=/workspace/gramps \
+          PYTHONPATH="/workspace/gramps-testbed/scripts/lib/strictgiwarn${PYTHONPATH:+:$PYTHONPATH}" \
           xvfb-run -a --server-args="-screen 0 1920x1080x24" \
-            python3 -m xmlrunner "${modules[@]}" \
+            python3 -W ignore::ImportWarning -m xmlrunner "${modules[@]}" \
               -o "$out_dir" \
               -v
       ) 2>&1 | tee "$run_log"
       rc=${PIPESTATUS[0]}
-      # Parse "Ran N tests in Xs" and the trailing OK/FAILED line to build
-      # a one-line summary entry. Tolerant of Python-exception aborts that
-      # produce no "Ran" line at all (ran stays "?").
-      ran=$(grep -oE "Ran [0-9]+ tests" "$run_log" | tail -n 1 | grep -oE "[0-9]+" || true)
-      ran="${ran:-?}"
-      if [ "$rc" -eq 0 ]; then
-        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests)" "$addon" "$ran")" )
-      else
+      # Coverage accounting from the JUnit XML, not the exit code: a run where
+      # every test SKIPPED still exits 0, so exit-code-only would mark an
+      # all-skipped addon PASS (8 tests) — visually identical to 8 that ran.
+      # Read tests/skipped from the XML and treat a wholly-skipped module as a
+      # failure (almost never intended — usually a missing dep / wrong version
+      # pin laundered into a skip).
+      coverage=$(python3 /workspace/gramps-testbed/scripts/lib/junit_coverage.py "$out_dir")
+      ran="${coverage% *}"; skipped="${coverage#* }"
+      ran="${ran:-0}"; skipped="${skipped:-0}"
+      if [ "$rc" -ne 0 ]; then
         fail=1
         detail=$(grep -oE "FAILED \([^)]*\)" "$run_log" | tail -n 1 || true)
         detail="${detail:-crashed}"
         summary_lines+=( "$(printf "  %-30s  FAIL  (%s tests, %s)" "$addon" "$ran" "$detail")" )
+      elif [ "$ran" -gt 0 ] && [ "$skipped" -eq "$ran" ]; then
+        fail=1
+        summary_lines+=( "$(printf "  %-30s  FAIL  (all %s tests skipped)" "$addon" "$ran")" )
+      elif [ "$skipped" -gt 0 ]; then
+        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests, %s skipped)" "$addon" "$ran" "$skipped")" )
+      else
+        summary_lines+=( "$(printf "  %-30s  PASS  (%s tests)" "$addon" "$ran")" )
       fi
     done
 

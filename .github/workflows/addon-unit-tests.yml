@@ -72,9 +72,10 @@ jobs:
           path: addons-source
 
       - name: Install system dependencies
-        # No xvfb/dbus/at-spi — addon unit tests do not launch the GUI.
-        # Same apt list as unit-tests.yml: gramps.gen still imports gi on
-        # load, so GTK introspection bindings must be present.
+        # gramps.gen imports gi on load, so GTK introspection bindings must be
+        # present. xvfb is included because some addons (e.g. GraphView) create
+        # a Gtk style context at import time, which needs a display — the
+        # per-addon run below wraps in xvfb-run, mirroring run-addon-unit.sh.
         #
         # python3-venv / python3-pip are installed here so the next step
         # can build a venv that inherits python3-gi from the system
@@ -89,6 +90,7 @@ jobs:
             python3-gi python3-gi-cairo python3-cairo python3-icu \
             gir1.2-gtk-3.0 \
             libgirepository1.0-dev \
+            xvfb \
             gettext intltool \
             librsvg2-common \
             $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
@@ -243,12 +245,29 @@ jobs:
               fail=1
               continue
             fi
+            rc=0
             (
               cd "$GITHUB_WORKSPACE/addons-source"
-              python -m xmlrunner "${modules[@]}" \
-                -o "$out_dir" \
-                -v
-            ) || fail=1
+              # xvfb-run: addons that create a Gtk style context at import need
+              #   a display (else a hard Gtk-ERROR abort, not a clean skip).
+              # PYTHONPATH shim + -W: promote PyGIWarning to an error so an
+              #   addon importing a GI module without a version pin fails loudly
+              #   (see scripts/lib/strictgiwarn + run-addon-unit.sh).
+              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/strictgiwarn${PYTHONPATH:+:$PYTHONPATH}" \
+                xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+                  python -W ignore::ImportWarning -m xmlrunner "${modules[@]}" \
+                    -o "$out_dir" \
+                    -v
+            ) || rc=$?
+            # Coverage accounting from the JUnit XML: a wholly-skipped module
+            # still exits 0, which exit-code-only would call PASS. Fail it.
+            read -r t s < <(python "$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/junit_coverage.py" "$out_dir")
+            if [ "$rc" -ne 0 ]; then
+              fail=1
+            elif [ "${t:-0}" -gt 0 ] && [ "${s:-0}" -eq "${t:-0}" ]; then
+              echo "::error::$addon: all ${t} tests skipped (degraded coverage)"
+              fail=1
+            fi
           done
           exit $fail
 
