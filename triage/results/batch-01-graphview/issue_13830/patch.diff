@@ -1,0 +1,51 @@
+diff --git a/gramps/gen/filters/rules/test/person_rules_test.py b/gramps/gen/filters/rules/test/person_rules_test.py
+index 8a13c9f8d5..0bf7c0b69a 100644
+--- a/gramps/gen/filters/rules/test/person_rules_test.py
++++ b/gramps/gen/filters/rules/test/person_rules_test.py
+@@ -99,6 +99,7 @@ from ..person import (
+     PersonWithIncompleteEvent,
+     ProbablyAlive,
+     RegExpName,
++    RelationshipPathBetween,
+     RelationshipPathBetweenBookmarks,
+ )
+ 
+@@ -1326,6 +1327,38 @@ class BaseTest(unittest.TestCase):
+             ),
+         )
+ 
++    def test_relationshippathbetween(self):
++        """
++        Test RelationshipPathBetween rule.
++
++        Regression for Mantis 13830: ``init_list`` previously contained
++        ``for person_handle in firstList and secondList:``, which Python
++        evaluates as ``secondList`` via short-circuit ``and``. The loop
++        then read ``firstMap[person_handle]`` with handles drawn only
++        from secondList, so any handle reachable from the second root
++        but not the first triggered ``KeyError`` — the symptom users
++        saw via Graph View's "Show path to home person" menu.
++
++        Two persons in different family lines exercise the regression
++        case: the second root's ancestors are not a subset of the
++        first's, so the buggy iteration raised ``KeyError`` on the
++        first non-shared handle. With the fix the rule returns the
++        two endpoints unchanged when no common ancestor exists.
++        """
++        # I0044 (Lewis Anderson Garner, home person of example.gramps)
++        # and I2127 (a member of the unrelated Δεληπέτρου family) share
++        # no common ancestor.
++        rule = RelationshipPathBetween(["I0044", "I2127"])
++        self.assertEqual(
++            self.filter_with_rule(rule),
++            set(
++                [
++                    "GNUJQCL9MD64AM56OH",  # I0044
++                    "d583a5ba5ca6b698463",  # I2127
++                ]
++            ),
++        )
++
+     def test_hassoundexname(self):
+         """
+         Test HasSoundexName rule.

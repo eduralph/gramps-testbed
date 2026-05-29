@@ -23,11 +23,18 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
   itself uses unittest, so pytest is not introduced anywhere in the testbed)
 - Local pre-commit + post-push verification (set up via
   `dev-tooling/pre-commit/install.sh`):
-  - Pre-commit runs black + mypy (gramps), ruff E9/F63/F7/F82 +
-    ast.parse (addons-source + testbed). Configs are out-of-tree under
-    `dev-tooling/pre-commit/` so fork maintenance branches stay clean
-    of dev-tooling commits. See `dev-tooling/pre-commit/README.md` for
-    what each hook catches.
+  - Pre-commit hooks differ per repo:
+    - gramps fork: black + mypy.
+    - addons-source fork: ruff E9/F63/F7/F82 + ast.parse.
+    - testbed itself: black (`--check --diff`) + ruff E9/F63/F7/F82 +
+      ast.parse, with `triage/` excluded from all three — it holds
+      committed evidence artifacts (one-off repro scripts captured
+      as-run), not maintained source.
+    The two fork configs are out-of-tree under `dev-tooling/pre-commit/`
+    (installed via `install.sh`) so fork maintenance branches stay clean
+    of dev-tooling commits; the testbed's own config is in-tree at
+    `.pre-commit-config.yaml` (standard layout, `pre-commit install`).
+    See `dev-tooling/pre-commit/README.md` for what each hook catches.
   - After pushing a fork branch, verify the resulting PR is green:
     `./scripts/verify-pr.sh <org/repo> <PR#> --watch`. Required because
     pre-commit only catches static checks; test failures (e.g. PR 2335

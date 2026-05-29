@@ -19,5 +19,4 @@ work/
 # keep scripts and the curated verdicts
 triage/data/
 triage/notes/
-triage/batches/*/results/
 dev-tooling/findings/

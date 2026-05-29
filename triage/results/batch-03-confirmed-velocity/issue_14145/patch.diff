@@ -1,0 +1,207 @@
+From 26ab7f98d6cd1b1a31c2b4df50447265a60dbeeb Mon Sep 17 00:00:00 2001
+From: Eduard Ralph <eduard@ralphovi.net>
+Date: Mon, 25 May 2026 14:33:32 +0200
+Subject: [PATCH] FRWebConnectPack: update Geneanet search URL to current
+ individus form
+MIME-Version: 1.0
+Content-Type: text/plain; charset=UTF-8
+Content-Transfer-Encoding: 8bit
+
+The Geneanet entry in WEBSITES (FRWebPack.py:45) pointed at the
+deprecated `https://search.geneanet.org/result.php?lang=fr&name=...`
+URL, which no longer returns useful results, and the template only
+carried the surname.
+
+Replace with the current individus search the reporter on Mantis
+14145 supplied:
+
+  https://www.geneanet.org/fonds/individus/?go=1&nom=%(surname)s&prenom=%(given)s
+
+The two `%(...)s` placeholders match the file's existing convention
+(see lines 41, 46, 48) and the libwebconnect URL builder at
+libwebconnect/libwebconnect.py:182, which formats the pattern with
+the dict returned by make_person_dict — both `surname` and `given`
+keys are populated there.
+
+callmedave's note 4 on the tracker recommends the WebSearch
+Gramplet as a longer-term replacement for the Web Connect Pack
+family of addons, BUT his note 5 explicitly confirms the bug for
+FrWebConnectPack — so the live addon is still in scope and this is
+not a wontfix.
+
+Add a regression test in `FRWebConnectPack/tests/` that pulls the
+Geneanet pattern from WEBSITES and applies the same `pattern %
+dict` formatting libwebconnect uses. Pure string assertion — no
+network, no display, no Gtk. The test covers both halves of the
+fix: the URL must include both name parts (the given name was
+discarded pre-fix) and must target the current host/path/params
+(the old `search.geneanet.org/result.php` form is asserted absent).
+
+Verified via the testbed's `run-addon-unit.sh FRWebConnectPack`:
+
+  Before fix: FAILED (failures=2)
+  After fix:  2 tests, OK
+
+Fixes #14145
+
+Co-Authored-By: Claude Opus 4.7 (1M context) <noreply@anthropic.com>
+---
+ FRWebConnectPack/FRWebPack.py               |   2 +-
+ FRWebConnectPack/tests/__init__.py          |   0
+ FRWebConnectPack/tests/test_geneanet_url.py | 127 ++++++++++++++++++++
+ 3 files changed, 128 insertions(+), 1 deletion(-)
+ create mode 100644 FRWebConnectPack/tests/__init__.py
+ create mode 100644 FRWebConnectPack/tests/test_geneanet_url.py
+
+diff --git a/FRWebConnectPack/FRWebPack.py b/FRWebConnectPack/FRWebPack.py
+index f693fda66..212dc1035 100755
+--- a/FRWebConnectPack/FRWebPack.py
++++ b/FRWebConnectPack/FRWebPack.py
+@@ -42,7 +42,7 @@ WEBSITES = [
+     ["Person", "Geneabank", _("Genealogical bank"), "https://gbkcouples.geneabank.org/nom/?name=%(surname)s&place=&start=&end=&source=gbk*"],
+     #["Person", "Centre Départemental d'Histoire des Familles (CDHF)", _("Historical Families Center Departement (CDHF)"), "http://www.cdhf.net/fr/index.php?t=bases&d=bases%2Fmoteurpat&c=moteurpat&f=selection&p=&order=&order2=&motcle=&patronyme=%(surname)s"],
+     ["Person", "Fichier Origine", _("OrigineFile (Quebec)"), "https://www.fichierorigine.com/recherche?nom=%(surname)s"],
+-    ["Person", "Geneanet", "Geneanet", "https://search.geneanet.org/result.php?lang=fr&name=%(surname)s"],
++    ["Person", "Geneanet", "Geneanet", "https://www.geneanet.org/fonds/individus/?go=1&nom=%(surname)s&prenom=%(given)s"],
+     ["Person", "Filae", "Filae", "https://www.filae.com/v4/genealogie/Search.mvc/SearchForm?ln=%(surname)s&fn=%(given)s"],
+     #["Person", "Geneanet-Favrejhas", "Geneanet, Favrejhas", "http://gw1.geneanet.org/index.php3?b=favrejhas&m=NG&n=%(surname)s&t=N&x=0&y=0"],
+     ["Person", "Roglo", "Roglo", "http://roglo.eu/roglo?m=NG&n=%(given)s+%(surname)s&t=PN"],
+diff --git a/FRWebConnectPack/tests/__init__.py b/FRWebConnectPack/tests/__init__.py
+new file mode 100644
+index 000000000..e69de29bb
+diff --git a/FRWebConnectPack/tests/test_geneanet_url.py b/FRWebConnectPack/tests/test_geneanet_url.py
+new file mode 100644
+index 000000000..d0a78689a
+--- /dev/null
++++ b/FRWebConnectPack/tests/test_geneanet_url.py
+@@ -0,0 +1,127 @@
++#
++# Gramps - a GTK+/GNOME based genealogy program
++#
++# Copyright (C) 2026  Gramps Development Team
++#
++# This program is free software; you can redistribute it and/or modify
++# it under the terms of the GNU General Public License as published by
++# the Free Software Foundation; either version 2 of the License, or
++# (at your option) any later version.
++#
++# This program is distributed in the hope that it will be useful,
++# but WITHOUT ANY WARRANTY; without even the implied warranty of
++# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++# GNU General Public License for more details.
++#
++# You should have received a copy of the GNU General Public License
++# along with this program; if not, write to the Free Software
++# Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA.
++#
++
++"""
++Regression test for bug 14145: FRWebConnectPack Geneanet link is stale.
++
++Pre-fix WEBSITES entry pointed at
++``https://search.geneanet.org/result.php?lang=fr&name=<surname>`` --
++Geneanet deprecated that URL, returning an unusable page, and the
++template only carried the surname (Geneanet's current individus search
++takes both ``nom`` and ``prenom``). Reporter on Mantis 14145 supplied
++the corrected URL; callmedave confirmed the bug (note 5) despite
++recommending the WebSearch Gramplet as a longer-term replacement, so
++the live FrWebConnectPack addon still needs fixing.
++
++The test imports ``WEBSITES`` from ``FRWebConnectPack.FRWebPack`` and
++applies the same ``pattern % dict`` formatting libwebconnect itself
++uses (see ``libwebconnect.Search.callback``). No network, no display,
++no Gtk -- pure string assertion.
++"""
++
++import os
++import sys
++import unittest
++
++# Make sure addon modules are importable from the parent directory.
++sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
++
++
++class TestGeneanetUrl(unittest.TestCase):
++    """Regression: the Geneanet WEBSITES entry must build a working URL."""
++
++    @staticmethod
++    def _geneanet_pattern():
++        # Addon dir and impl module share the name ``FRWebConnectPack``
++        # under the addon's package namespace; load the implementation
++        # via the explicit submodule path to dodge the namespace-package
++        # shadowing trap (gramps bug 0012691 family).
++        from FRWebConnectPack import FRWebPack  # pylint: disable=import-outside-toplevel
++
++        for entry in FRWebPack.WEBSITES:
++            # entry: [nav_type, key, name, url_pattern]
++            if entry[1] == "Geneanet":
++                return entry[3]
++        raise AssertionError("Geneanet entry missing from FRWebPack.WEBSITES")
++
++    def test_built_url_contains_both_name_parts(self):
++        """Geneanet URL template must take given AND surname.
++
++        Pre-fix the template only carried ``%(surname)s``; reporter
++        on 14145 noted searches returned the wrong people because the
++        given name was discarded.
++        """
++        pattern = self._geneanet_pattern()
++        url = pattern % {
++            "surname": "Dupont",
++            "given": "Marie",
++            "middle": "",
++            "birth": "",
++            "death": "",
++        }
++        self.assertIn("Dupont", url, "surname must appear in built URL")
++        self.assertIn("Marie", url, "given name must appear in built URL")
++
++    def test_built_url_uses_current_geneanet_host_and_path(self):
++        """Geneanet URL must target the current individus search.
++
++        Pre-fix the template hit ``search.geneanet.org/result.php`` --
++        deprecated. Reporter on 14145 supplied the replacement
++        ``www.geneanet.org/fonds/individus/?go=1&nom=...&prenom=...``.
++        """
++        pattern = self._geneanet_pattern()
++        url = pattern % {
++            "surname": "Dupont",
++            "given": "Marie",
++            "middle": "",
++            "birth": "",
++            "death": "",
++        }
++        # Stale form -- must NOT appear after the fix.
++        self.assertNotIn(
++            "result.php",
++            url,
++            "deprecated Geneanet search URL must not be used",
++        )
++        self.assertNotIn(
++            "search.geneanet.org",
++            url,
++            "deprecated Geneanet search host must not be used",
++        )
++        # Corrected form -- must appear.
++        self.assertIn(
++            "www.geneanet.org/fonds/individus/",
++            url,
++            "current Geneanet individus search path must be used",
++        )
++        self.assertIn(
++            "nom=Dupont",
++            url,
++            "surname must be passed as the 'nom' query parameter",
++        )
++        self.assertIn(
++            "prenom=Marie",
++            url,
++            "given name must be passed as the 'prenom' query parameter",
++        )
++
++
++if __name__ == "__main__":
++    unittest.main()
+-- 
+2.53.0
+
