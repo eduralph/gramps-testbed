@@ -250,12 +250,13 @@ jobs:
               cd "$GITHUB_WORKSPACE/addons-source"
               # xvfb-run: addons that create a Gtk style context at import need
               #   a display (else a hard Gtk-ERROR abort, not a clean skip).
-              # PYTHONPATH shim + -W: promote PyGIWarning to an error so an
-              #   addon importing a GI module without a version pin fails loudly
-              #   (see scripts/lib/strictgiwarn + run-addon-unit.sh).
-              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/strictgiwarn${PYTHONPATH:+:$PYTHONPATH}" \
+              # PYTHONPATH gi_bootstrap: pin the GI versions (Pango/PangoCairo/
+              #   Gtk) like gramps' GUI launcher, so importing a gramps.gui.*
+              #   module loads the GTK 3 stack rather than warning / risking
+              #   GTK 4 (see scripts/lib/gi_bootstrap + run-addon-unit.sh).
+              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
                 xvfb-run -a --server-args="-screen 0 1920x1080x24" \
-                  python -W ignore::ImportWarning -m xmlrunner "${modules[@]}" \
+                  python -m xmlrunner "${modules[@]}" \
                     -o "$out_dir" \
                     -v
             ) || rc=$?

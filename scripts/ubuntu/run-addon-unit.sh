@@ -248,18 +248,16 @@ PY
         # than letting the import guard in the test skip cleanly. Headless
         # addon tests are unaffected by the extra display.
         # (No raw apostrophes in this block: it runs inside docker bash -c.)
-        # PYTHONPATH prepends scripts/lib/strictgiwarn, whose sitecustomize
-        # promotes PyGIWarning to an error so an addon that imports a GI module
-        # without pinning its version fails loudly instead of degrading to a
-        # silent all-skip on a differently-defaulted Gdk host.
-        # The -W flag is load-bearing despite ImportWarning being irrelevant:
-        # python -m unittest / xmlrunner force warnings.simplefilter("default")
-        # (wiping the sitecustomize error filter) UNLESS sys.warnoptions is
-        # non-empty, so a harmless -W keeps that filter alive during the run.
+        # PYTHONPATH prepends scripts/lib/gi_bootstrap, whose sitecustomize pins
+        # the GI versions (Pango/PangoCairo/Gtk) the way the gramps GUI launcher
+        # does, so an addon test importing a gramps.gui.* module loads the
+        # supported GTK 3 stack instead of emitting a PyGIWarning / risking GTK 4
+        # on a host where it is the default. Silent-skip detection below is the
+        # backstop for runs that skip for any other reason.
         GRAMPS_RESOURCES=/workspace/gramps \
-          PYTHONPATH="/workspace/gramps-testbed/scripts/lib/strictgiwarn${PYTHONPATH:+:$PYTHONPATH}" \
+          PYTHONPATH="/workspace/gramps-testbed/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
           xvfb-run -a --server-args="-screen 0 1920x1080x24" \
-            python3 -W ignore::ImportWarning -m xmlrunner "${modules[@]}" \
+            python3 -m xmlrunner "${modules[@]}" \
               -o "$out_dir" \
               -v
       ) 2>&1 | tee "$run_log"
