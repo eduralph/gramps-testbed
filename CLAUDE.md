@@ -21,6 +21,18 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
 ## Conventions
 - All tests use stdlib unittest.TestCase (contributable upstream; gramps
   itself uses unittest, so pytest is not introduced anywhere in the testbed)
+- Local pre-commit + post-push verification (set up via
+  `dev-tooling/pre-commit/install.sh`):
+  - Pre-commit runs black + mypy (gramps), ruff E9/F63/F7/F82 +
+    ast.parse (addons-source + testbed). Configs are out-of-tree under
+    `dev-tooling/pre-commit/` so fork maintenance branches stay clean
+    of dev-tooling commits. See `dev-tooling/pre-commit/README.md` for
+    what each hook catches.
+  - After pushing a fork branch, verify the resulting PR is green:
+    `./scripts/verify-pr.sh <org/repo> <PR#> --watch`. Required because
+    pre-commit only catches static checks; test failures (e.g. PR 2335
+    where a `__new__`-built fixture was missing `dbstate` / `uistate`)
+    only surface in CI's actual unit-test run.
 - Local runs, mirrors CI:
   - Ubuntu (containerised, Docker):
     - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
@@ -85,6 +97,37 @@ A closed PR is signal, not noise. RebuildTypes (batch-03) was written,
 tested green, then discarded because closed PR #877 showed the author had
 agreed to delete the addon. Checking closed PRs first would have made it a
 confirm-and-close from the start.
+
+### Confirm-and-close is a first-class outcome (often the most common)
+
+A bug is "closed" whether by a fix, a confirm-and-close, or an evidenced
+can't-repro / by-design / external / duplicate. On a recent-pool batch, roughly a
+third of items turn out already-fixed, by-design, duplicate, or external once the
+scraped thread + current source are checked — NOT fresh fixes.
+
+For any item whose verdict is flagged POSSIBLY-FIXED or says "verify upstream
+isn't ahead", the **default first action is the verification, not a fix**. Lead
+with the upstream/PR check (below); only fall through to writing a fix when the
+check confirms the defect is still live on the target branch. A confirmed close
+with an evidenced `mantis-comment.md` is a complete, successful outcome — do not
+treat it as lesser than a patch.
+
+### If a PR already exists, VERIFY it — do not duplicate
+
+Triage threads frequently link a PR that already addresses the bug. Assess its
+state instead of rewriting the fix:
+
+- **Merged** — verify the merge commit is an ancestor of the **correct** target
+  branch — mind the gramps60-vs-61 split; a PR merged to one branch may not be on
+  the other. Then confirm-and-close, citing the PR + commit.
+- **Open** — review it for correctness and branch; write `SUMMARY.md` noting the
+  existing PR and whether it looks complete. Do **NOT** open a competing PR.
+  Defer to Eduard on whether to push it forward.
+- **Closed / rejected** — treat as the closed-PR signal (maintainer declined or
+  deleted): record the finding, do not re-attempt the same fix shape.
+
+This is distinct from the merged-history check: a PR existing means *assess that
+PR*, not *re-solve the bug*.
 
 - **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
   the current production branch — the latest `maintenance/gramps*`

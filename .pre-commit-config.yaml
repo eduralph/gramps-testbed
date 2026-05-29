@@ -1,0 +1,41 @@
+# Pre-commit config for gramps-testbed itself.
+#
+# Lives at repo root (standard pre-commit layout) so cloning the
+# testbed + running `pre-commit install` is the only setup needed.
+# The gramps and addons-source fork configs live under
+# dev-tooling/pre-commit/ and are installed via install.sh.
+#
+# testbed CI does not have a formal lint gate, but the same E9/F63/F7/F82
+# set the addons-source CI uses catches the bugs that ruined two PRs in
+# session 2026-05-26 (PR 2334 lint, PR 2335 missing test fixture
+# attribute -- the latter would have surfaced only on test run, not lint).
+
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.5.0
+    hooks:
+      - id: black
+        args: ["--check", "--diff"]
+        files: \.py$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.9.6
+    hooks:
+      - id: ruff
+        # The hook's entry is `ruff check --force-exclude` -- pass only
+        # the additional flags via args.
+        args:
+          - --select=E9,F63,F7,F82
+          - --no-fix
+        files: \.py$
+
+  - repo: local
+    hooks:
+      - id: py-syntax
+        name: ast.parse (catch SyntaxError before commit)
+        language: system
+        entry: python3 -c "import ast,sys;[ast.parse(open(p).read(),p) for p in sys.argv[1:]]"
+        files: \.py$

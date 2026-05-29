@@ -37,7 +37,14 @@ import re
 from pathlib import Path
 
 TRACKER = "https://gramps-project.org/bugs/view.php?id="
-DEFAULT_BRANCH = "maintenance/gramps61"
+# Branch target is NOT uniform across a batch — it is resolved PER ITEM by where
+# the fix lands: addons-source -> maintenance/gramps60, gramps core ->
+# maintenance/gramps61. There is therefore no single correct default; the verdict
+# scaffold presents BOTH and forces the human to delete the wrong one. (A prior
+# hardcoded gramps61 default silently contaminated every addon item in a batch and
+# had to be sed'd out by hand — do not reintroduce a single default.)
+BRANCH_ADDONS = "maintenance/gramps60"
+BRANCH_CORE = "maintenance/gramps61"
 
 
 def norm(raw):
@@ -70,15 +77,22 @@ def clean_note_blocks(rec):
         out.append({"author": author, "date": date, "text": v.strip()})
     if not out:
         for n in rec.get("notes", []) or []:
-            out.append({"author": n.get("author", ""), "date": n.get("date", ""),
-                        "text": (n.get("text") or "").strip()})
+            out.append(
+                {
+                    "author": n.get("author", ""),
+                    "date": n.get("date", ""),
+                    "text": (n.get("text") or "").strip(),
+                }
+            )
     return out
 
 
 # Auto-flags: cheap first-pass warnings the human verdict confirms/overrides.
 EXT_REPO = re.compile(r"FamilyTreeView|github\.com/ztlxltl|CardView|/cdhorn/", re.I)
 UPSTREAM = re.compile(r"gitlab\.gnome\.org|upstream bug|Pango|GTK issue", re.I)
-FIXED = re.compile(r"released v|fixed in|now resolved|adds a fallback|just released", re.I)
+FIXED = re.compile(
+    r"released v|fixed in|now resolved|adds a fallback|just released", re.I
+)
 CORE = re.compile(r"gramps[/\\]gen[/\\]|gramps\.gen\.|/filters/|_genericfilter", re.I)
 
 
@@ -86,15 +100,25 @@ def auto_flags(row, notes):
     blob = " ".join(n["text"] for n in notes) + " " + row.get("Summary", "")
     flags = []
     if EXT_REPO.search(blob):
-        flags.append("EXTERNAL-REPO: fix may live outside addons-source — NOT a Claude Code target here")
+        flags.append(
+            "EXTERNAL-REPO: fix may live outside addons-source — NOT a Claude Code target here"
+        )
     if UPSTREAM.search(blob):
-        flags.append("UPSTREAM: root cause may be Gramps core / GTK / Pango, not the addon")
+        flags.append(
+            "UPSTREAM: root cause may be Gramps core / GTK / Pango, not the addon"
+        )
     if CORE.search(blob):
-        flags.append("CORE-TRACE: traceback passes through gramps/gen — fix may belong in ../gramps, not the addon")
+        flags.append(
+            "CORE-TRACE: traceback passes through gramps/gen — fix may belong in ../gramps, not the addon"
+        )
     if FIXED.search(blob):
-        flags.append("POSSIBLY-FIXED: a comment mentions a release/fix — verify upstream isn't ahead before working")
+        flags.append(
+            "POSSIBLY-FIXED: a comment mentions a release/fix — verify upstream isn't ahead before working"
+        )
     if not notes:
-        flags.append("NO-NOTES: no tracker discussion scraped (may be unengaged / low signal)")
+        flags.append(
+            "NO-NOTES: no tracker discussion scraped (may be unengaged / low signal)"
+        )
     return flags
 
 
@@ -102,7 +126,7 @@ VERDICT_SCAFFOLD = f"""## ===== TRIAGE VERDICT (fill before handoff) =====
 
 - **Actionable?** yes / no / deferred —
 - **Where does the fix go?** addons-source (in-tree) / gramps core (../gramps) / external repo / upstream — (this decides the PR target repo; resolve before coding)
-- **Branch target:** {DEFAULT_BRANCH}  (per CLAUDE.md; only new-feature work targets master)
+- **Branch target (resolve by where the FIX lands, not the symptom):** addons-source → {BRANCH_ADDONS} | gramps core → {BRANCH_CORE} — DELETE THE WRONG ONE
 - **Root cause (one line):**
 - **Does the reporter's workaround match the real root cause?** (verify — the symptom on their machine may differ from the defect in current source)
 - **Fix sketch:**
@@ -119,7 +143,9 @@ VERDICT_SCAFFOLD = f"""## ===== TRIAGE VERDICT (fill before handoff) =====
 def issue_brief(row, notes):
     iid = norm(row["Id"])
     flags = auto_flags(row, notes)
-    flag_md = "\n".join(f"- [warn] {f}" for f in flags) if flags else "- (none auto-detected)"
+    flag_md = (
+        "\n".join(f"- [warn] {f}" for f in flags) if flags else "- (none auto-detected)"
+    )
 
     notes_md = ""
     for i, n in enumerate(notes, 1):
@@ -165,7 +191,8 @@ via additionalDirectories: `../gramps`, `../addons-source`, `../addons`.
 
 ## Authoritative conventions — read these, do not re-derive
 - **`../gramps-testbed/CLAUDE.md`** — the Upstream fix workflow section is binding:
-  branch targeting ({DEFAULT_BRANCH}, not master, for fixes), "edit source never the
+  branch targeting (addons-source→{BRANCH_ADDONS}, gramps core→{BRANCH_CORE}, NOT
+  master, NOT uniform — resolve per item by where the fix lands), "edit source never the
   plugin dir", reproduce against example.gramps first, the PR description format, the
   Mantis cross-link syntax, and **Eduard's review gate (you commit and STOP — no
   pushing, no opening PRs, no marking ready unless explicitly instructed)**.
@@ -198,7 +225,11 @@ root cause than the live defect in current source.
 4. **One logical fix per issue.** No bundling (CLAUDE.md: bundling hides mistakes).
 5. **Verify against the target branch's code and cite path:lines** (CLAUDE.md).
    "Applies cleanly" is not "remains correct" across gramps60/61/master.
-6. **Check upstream isn't already ahead** before declaring a bug unfixed.
+6. **Check upstream isn't already ahead — merged AND closed/rejected PRs.** A
+   closed PR is signal, not noise: the maintainer may have decided to delete the
+   addon or declined this fix shape (e.g. RebuildTypes was deleted per the
+   author's request, discovered only via a closed PR). Check BOTH merged history
+   and closed PRs before declaring a bug unfixed or writing a fix.
 
 ## Per-issue workflow
 1. Read `issue_<id>.md`, especially the VERDICT and its root-cause caveat.
@@ -219,6 +250,15 @@ root cause than the live defect in current source.
      MANTIS_ACTIONS.md — generate the actual comment text (templates there are a
      starting point, not a substitute). Exempt only: items with NO Mantis entry
      (e.g. detector (c)-bucket items), which note "no Mantis issue" instead.
+   - `MANUAL-VERIFICATION.md` — REQUIRED for ANY manual-work outcome: visual
+     sign-off (e.g. dark-mode/contrast), post-merge GUI repro, or OS-specific
+     verification (macOS/Windows, where Linux can't confirm — Windows GUI
+     automation is paused, no UIA tree). Uniform filename across all such cases.
+     Also flag the required human step PROMINENTLY at the top of SUMMARY.md.
+     Contains: what manual step + why it can't be automated; platform(s);
+     exact environment; numbered repro steps; expected-vs-defect; what to
+     capture; a decision tree; and BOTH pre-written Mantis comments (confirmed
+     / could-not-confirm) so whichever way it goes, the paste is ready.
 6. STOP. Eduard reviews, then decides on commit/push/PR.
 
 ## Reminders from project conventions
@@ -236,17 +276,23 @@ def main():
     ap.add_argument("--csv", required=True)
     ap.add_argument("--notes-dir", default="notes")
     ap.add_argument("--ids", required=True, help="comma-separated issue IDs")
-    ap.add_argument("--batch", required=True, help="batch folder name, e.g. batch-01-graphview")
+    ap.add_argument(
+        "--batch", required=True, help="batch folder name, e.g. batch-01-graphview"
+    )
     ap.add_argument("--batches-dir", default="batches")
-    ap.add_argument("--clobber", action="store_true",
-                    help="Overwrite existing issue_<id>.md briefs. Default is to SKIP "
-                         "issues whose brief already exists, so re-running to add IDs "
-                         "never destroys a filled-in TRIAGE VERDICT.")
+    ap.add_argument(
+        "--clobber",
+        action="store_true",
+        help="Overwrite existing issue_<id>.md briefs. Default is to SKIP "
+        "issues whose brief already exists, so re-running to add IDs "
+        "never destroys a filled-in TRIAGE VERDICT.",
+    )
     args = ap.parse_args()
 
     # stdlib csv (no pandas) — keeps the triage scripts dependency-free,
     # matching the testbed's stdlib-only discipline. Index rows by normalized id.
     import csv
+
     by_id = {}
     with open(args.csv, newline="", encoding="utf-8-sig") as fh:
         reader = csv.DictReader(fh)
@@ -267,23 +313,37 @@ def main():
             continue
         brief_path = batch_dir / f"issue_{iid}.md"
         if brief_path.exists() and not args.clobber:
-            print(f"#{iid}: brief exists, SKIPPING (use --clobber to overwrite). "
-                  f"Verdict preserved.")
+            print(
+                f"#{iid}: brief exists, SKIPPING (use --clobber to overwrite). "
+                f"Verdict preserved."
+            )
             (batch_dir / "results" / f"issue_{iid}").mkdir(parents=True, exist_ok=True)
             # still include it in the index
             rec = load_notes(notes_dir, iid)
             notes = clean_note_blocks(rec) if rec else []
             flags = auto_flags(row, notes)
-            index_rows.append((iid, row.get("Summary", "")[:55], len(notes),
-                               "; ".join(f.split(":")[0] for f in flags)))
+            index_rows.append(
+                (
+                    iid,
+                    row.get("Summary", "")[:55],
+                    len(notes),
+                    "; ".join(f.split(":")[0] for f in flags),
+                )
+            )
             continue
         rec = load_notes(notes_dir, iid)
         notes = clean_note_blocks(rec) if rec else []
         brief_path.write_text(issue_brief(row, notes), encoding="utf-8")
         (batch_dir / "results" / f"issue_{iid}").mkdir(parents=True, exist_ok=True)
         flags = auto_flags(row, notes)
-        index_rows.append((iid, row.get("Summary", "")[:55], len(notes),
-                           "; ".join(f.split(":")[0] for f in flags)))
+        index_rows.append(
+            (
+                iid,
+                row.get("Summary", "")[:55],
+                len(notes),
+                "; ".join(f.split(":")[0] for f in flags),
+            )
+        )
         print(f"#{iid}: brief written ({len(notes)} notes, {len(flags)} flags)")
 
     idx = f"# Batch: {args.batch}\n\n| ID | Summary | Notes | Auto-flags |\n|---|---|---|---|\n"
@@ -294,13 +354,20 @@ def main():
     idx += "- [ ] EXTERNAL-REPO / UPSTREAM issues removed from the batch (not fixable here)\n"
     idx += "- [ ] Each issue's repo target (addon vs core) is resolved or flagged for repro\n"
     idx += "- [ ] Each surviving issue repros on example.gramps (no private data)\n"
-    idx += "- [ ] Branch target confirmed (maintenance/gramps61 unless a reviewer said otherwise)\n"
+    idx += "- [ ] Branch target confirmed PER ITEM (addons-source->gramps60, core->gramps61 — NOT uniform)\n"
+    idx += "- [ ] Pre-flight checked merged AND closed/rejected PRs before any fix\n"
+    idx += "- [ ] Platform-specific items (macOS/Windows) flagged for MANUAL-VERIFICATION.md\n"
     (batch_dir / "BATCH_INDEX.md").write_text(idx, encoding="utf-8")
     (batch_dir / "CLAUDE_CODE_BRIEF.md").write_text(
-        CLAUDE_CODE_BRIEF.format(batch=args.batch), encoding="utf-8")
+        CLAUDE_CODE_BRIEF.format(batch=args.batch), encoding="utf-8"
+    )
 
-    print(f"\nWrote {len(index_rows)} briefs + BATCH_INDEX.md + CLAUDE_CODE_BRIEF.md to {batch_dir}/")
-    print("NEXT: fill TRIAGE VERDICT in each issue_*.md, prune non-in-tree, then point Claude Code at the batch.")
+    print(
+        f"\nWrote {len(index_rows)} briefs + BATCH_INDEX.md + CLAUDE_CODE_BRIEF.md to {batch_dir}/"
+    )
+    print(
+        "NEXT: fill TRIAGE VERDICT in each issue_*.md, prune non-in-tree, then point Claude Code at the batch."
+    )
 
 
 if __name__ == "__main__":
