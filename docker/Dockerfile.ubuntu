@@ -28,6 +28,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
       xdotool wmctrl \
       gettext intltool \
       librsvg2-common \
+      graphviz \
       git curl ca-certificates \
       fonts-dejavu-core \
       locales language-pack-gnome-en-base \
@@ -45,6 +46,14 @@ ENV LANG=en_US.UTF-8 \
 # checked-out addons-source/*/*.gpr.py files. That way the image stays
 # generic and the addon dep list is single-sourced from the .gpr.py
 # files (the same data Gramps' Addon Manager consumes for end users).
+#
+# System-level addon deps are the exception: requires_gi (GObject
+# typelibs, e.g. gir1.2-goocanvas-2.0 above) and requires_exe (system
+# binaries, e.g. graphviz providing `dot`) are NOT pip-installable, and
+# Gramps' own Requirements only *checks* them, never installs them — so
+# they must be present in the image. graphviz satisfies the
+# requires_exe=["dot"] declared by GraphView and other graph addons;
+# without it those addons raise at import and their tests silently skip.
 RUN pip3 install --break-system-packages --no-cache-dir \
       dogtail \
       unittest-xml-reporting

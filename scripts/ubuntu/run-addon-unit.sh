@@ -148,7 +148,15 @@ PY
         lang=$(basename "$po" .po)
         dest="/workspace/gramps/build/mo/$lang/LC_MESSAGES"
         mkdir -p "$dest"
-        msgfmt "$po" -o "$dest/gramps.mo"
+        # A single malformed upstream catalog (e.g. po/mn.po with mismatched
+        # plural \n entries) must not abort the addon-unit run under set -e
+        # before any test executes. Skip it, drop any partial .mo, and carry
+        # on — that locale just falls back to English, which does not affect
+        # the addon test suites. Mirrors run-manual.sh.
+        if ! msgfmt "$po" -o "$dest/gramps.mo" 2>/dev/null; then
+          echo "  ⚠ skipping $lang — msgfmt rejected $po (malformed catalog)"
+          rm -f "$dest/gramps.mo"
+        fi
       done
     fi
 
@@ -233,10 +241,18 @@ PY
       run_log="$out_dir/_run.log"
       (
         cd /workspace/addons-source
+        # Run under Xvfb (mirrors run-interface.sh). Some addons import Gtk
+        # modules that create a style context at import time, which needs a
+        # display connection; without one the interpreter aborts with a
+        # Gtk-ERROR about being unable to create a GtkStyleContext, rather
+        # than letting the import guard in the test skip cleanly. Headless
+        # addon tests are unaffected by the extra display.
+        # (No raw apostrophes in this block: it runs inside docker bash -c.)
         GRAMPS_RESOURCES=/workspace/gramps \
-          python3 -m xmlrunner "${modules[@]}" \
-            -o "$out_dir" \
-            -v
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" \
+            python3 -m xmlrunner "${modules[@]}" \
+              -o "$out_dir" \
+              -v
       ) 2>&1 | tee "$run_log"
       rc=${PIPESTATUS[0]}
       # Parse "Ran N tests in Xs" and the trailing OK/FAILED line to build
