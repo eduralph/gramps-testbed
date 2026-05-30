@@ -99,6 +99,17 @@ Before writing any fix (addon or core), check BOTH:
 - **Closed/rejected PRs** — search open AND closed PRs for the addon
   (or affected module) name on the relevant `gramps-project/*` repo
   (did maintainers decide to delete it, or reject this fix shape?).
+- **Search by affected file path, not just the bug number or a keyword
+  substring.** A PR can fix your bug as a *side effect* of a larger
+  rewrite without ever citing the bug, so a bug-number search misses it
+  entirely. And GitHub tokenizes search terms: `latex in:title` does NOT
+  match "Latexdoc" — only the full token `latexdoc` (or a free-text
+  search) does. So anchor the check on the file(s) the diff touches
+  (e.g. `latexdoc.py`) and the exact module token, in addition to the
+  bug ID. PR 2341 (bug 13418, one-line `str_incr` fix) duplicated the
+  fix already sitting in open PR 2208 ("Major upgrade to Latexdoc"),
+  which a `13418` search and a `latex` keyword search both failed to
+  surface.
 
 A closed PR is signal, not noise. RebuildTypes (batch-03) was written,
 tested green, then discarded because closed PR #877 showed the author had

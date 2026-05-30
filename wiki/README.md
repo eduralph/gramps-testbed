@@ -6,23 +6,35 @@ and publishes it to the Gramps MediaWiki. **One-way: repo → wiki.**
 ```
 wiki/
 ├── pages/
-│   ├── content/      # the .md source tree — THIS is what relocates to addons-source one day
-│   └── templates/    # Obsidian "Templates" plugin source (NOT published)
-├── tools/            # converter + publisher + browser transport — STAYS here
-└── .wikisync/        # publish state (committed): one sidecar per page, mirrors pages/content/
+│   ├── 00 - meta/                    # repo-side notes (managed: false by convention)
+│   ├── 01 - preliminary notes/       # drafts / scratch
+│   ├── 02 - templates/               # Obsidian "Templates" plugin source (NEVER published)
+│   ├── 03 - User guide/              # end-user documentation
+│   ├── 04 - Technical Documentation/ # internals, architecture, contributor reference
+│   └── 05 - Addon development/       # addon authors' manual
+├── tools/                            # converter + publisher + browser transport — STAYS here
+└── .wikisync/                        # publish state (committed): one sidecar per page, mirrors pages/
 ```
 
-The `pages/` ↔ `tools/` split is deliberate: when/if upstream maintains addon
-docs in-repo, `pages/content/` moves with a `git mv` and the tooling stays
-behind. Keep `pages/content/` transport-agnostic — no tool cruft inside the
-content tree — so whoever renders it next (this rig, or upstream CI) just
-points at clean markdown.
+The folder names use Obsidian's "NN - " sort prefix so they order visibly in
+the file explorer; rename, renumber, add, or remove content folders freely.
+`publish.py` walks all of `pages/`, strips the `NN - ` prefix only when
+matching the special `templates` segment, and is otherwise structure-agnostic
+— the `managed: true` flag in front-matter is the publish allowlist for
+everything that isn't a template.
 
-`pages/templates/` holds the seed file(s) for Obsidian's core Templates plugin
-(set its template folder to `pages/templates`). `publish.py` defaults its
-`--docs-root` to `pages/content` and additionally skips any `templates/`
-subtree, so templates can carry `managed: true` (so a freshly-copied page is
-push-ready) without ever being published themselves.
+The `pages/` ↔ `tools/` split is deliberate: when/if upstream maintains addon
+docs in-repo, the relevant content folder (today `05 - Addon development/`)
+moves with a `git mv` and the tooling stays behind. Keep the content trees
+transport-agnostic — no tool cruft inside them — so whoever renders them next
+(this rig, or upstream CI) just points at clean markdown.
+
+The templates folder holds the seed file(s) for Obsidian's core Templates
+plugin (point its template folder there). `publish.py` skips any
+`templates`-named segment (`templates/`, `02 - templates/`, etc.)
+unconditionally, so templates can carry `managed: true` — making a
+freshly-copied page push-ready — without the template itself ever being
+pushable.
 
 ## Authoring a page
 
@@ -56,8 +68,8 @@ Everything else is plain GitHub-Flavored Markdown.
 ## Convert (no wiki, no browser)
 
 ```
-python3 tools/md2wiki.py pages/content/addon-development.md          # prints wikitext
-python3 tools/md2wiki.py pages/content/addon-development.md --json    # title+cats+text
+python3 tools/md2wiki.py "pages/05 - Addon development/addon-development.md"          # prints wikitext
+python3 tools/md2wiki.py "pages/05 - Addon development/addon-development.md" --json    # title+cats+text
 ```
 
 ## Publish

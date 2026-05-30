@@ -40,8 +40,11 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass, field
+from pathlib import Path
 
 import yaml
+
+import mdcommon
 
 FM_RE = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
 SHIM_RE = re.compile(r"<!--\s*wiki:(.*?)-->", re.DOTALL)
@@ -120,15 +123,50 @@ def _pandoc(markdown: str) -> str:
     return proc.stdout
 
 
-def convert_text(text: str, source: str = "<string>") -> ConvertedPage:
+def convert_text(
+    text: str,
+    source: str = "<string>",
+    *,
+    title_map: dict[str, str] | None = None,
+) -> ConvertedPage:
+    """Convert one page's Markdown to MediaWiki wikitext.
+
+    ``title_map`` resolves Obsidian-internal ``[[Page]]`` references; when
+    omitted, ``[[Page]]`` references in the body raise ``ValueError`` so a
+    silently-broken link can't slip through. Build the map with
+    ``mdcommon.build_title_map`` (or via ``convert_file`` / ``convert_dir``
+    which build it automatically).
+    """
     meta, body = split_frontmatter(text)
     title = meta.get("title")
     if not title:
         raise ValueError("front-matter missing required 'title'")
 
+    # Normalise Obsidian-native conventions BEFORE handing to pandoc. Code
+    # spans and HTML comments are stashed first so the preprocessors can't
+    # reach into them (an author documenting [[Page]] syntax in a comment
+    # or showing `[['list', 'literal']]` in a code block must not get their
+    # documentation silently rewritten).
+    body, code_tokens = mdcommon.stash_code(body)
+    body, comment_tokens = mdcommon.stash_html_comments(body)
+    body = mdcommon.convert_obsidian_embeds(body)
+    if mdcommon.OBSIDIAN_INTERNAL_LINK_RE.search(body):
+        if title_map is None:
+            raise ValueError(
+                f"{source}: contains Obsidian-internal [[Page]] links but no "
+                f"title_map was provided -- pass title_map=mdcommon.build_title_map(...)"
+            )
+        body = mdcommon.convert_obsidian_internal_links(body, title_map)
+    body = mdcommon.unstash_html_comments(body, comment_tokens)
+    body = mdcommon.unstash_code(body, code_tokens)
+
     stashed, tokens = _stash(body)
     raw = HEADING_ANCHOR_RE.sub("", _pandoc(stashed))
     wikitext = _unstash(raw, tokens).strip()
+    # Pandoc emits [[File:_media/foo.svg|cap]] from a markdown image with a
+    # subdir path, but MediaWiki's File: namespace is flat. Basenameify so
+    # the resulting wikitext links to a valid File: title.
+    wikitext = mdcommon.basenameify_file_refs(wikitext)
 
     cats = meta.get("categories") or []
     if isinstance(cats, str):
@@ -146,9 +184,23 @@ def convert_text(text: str, source: str = "<string>") -> ConvertedPage:
     )
 
 
-def convert_file(path: str) -> ConvertedPage:
+def convert_file(
+    path: str,
+    *,
+    title_map: dict[str, str] | None = None,
+) -> ConvertedPage:
+    """Convert a single .md file.
+
+    If ``title_map`` is omitted, one is built from the source file's parent
+    directory -- enough to resolve sibling-page ``[[Page]]`` references in
+    the common single-page case. For multi-folder vaults, build the map at
+    the docs-root and pass it explicitly.
+    """
+    src = Path(path)
+    if title_map is None:
+        title_map = mdcommon.build_title_map(src.parent)
     with open(path, encoding="utf-8") as f:
-        return convert_text(f.read(), source=path)
+        return convert_text(f.read(), source=path, title_map=title_map)
 
 
 def normalize(wikitext: str) -> str:

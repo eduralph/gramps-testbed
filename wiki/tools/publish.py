@@ -23,7 +23,7 @@ Usage:
   python3 publish.py                      # dry-run plan over all managed pages
   python3 publish.py --apply              # actually push
   python3 publish.py --apply --force      # push even over drift / adopt
-  python3 publish.py --docs-root pages/content --state-dir .wikisync
+  python3 publish.py --docs-root pages --state-dir .wikisync
   python3 publish.py --filter addon       # only sources whose path contains 'addon'
   python3 publish.py --no-login           # skip the interactive-login pause
 """
@@ -35,11 +35,25 @@ import glob
 import hashlib
 import json
 import os
+import re
 import sys
 import time
 from dataclasses import dataclass
+from pathlib import Path
 
 import md2wiki
+import mdcommon
+
+# Strip an Obsidian-style "NN - " sort prefix from a folder name before
+# comparing it, so "templates", "02 - templates", "10-Templates" all collapse
+# to "templates". Pattern: leading digits, optional whitespace, dash, optional
+# whitespace.
+_PREFIX_RE = re.compile(r"^\d+\s*-\s*")
+
+
+def _segment_name(seg: str) -> str:
+    return _PREFIX_RE.sub("", seg).lower()
+
 
 # Actions
 CREATE = "CREATE"
@@ -121,11 +135,17 @@ class PlanItem:
 
 def discover(docs_root: str, filt: str | None) -> list[str]:
     paths = sorted(glob.glob(os.path.join(docs_root, "**", "*.md"), recursive=True))
-    # Belt-and-braces: never publish anything under a templates/ subtree, even if
-    # someone overrides --docs-root to a parent that contains one. Templates ship
-    # with managed: true so a freshly-copied page is push-ready; that same flag
-    # would make the template itself pushable if it slipped into discovery.
-    paths = [p for p in paths if f"{os.sep}templates{os.sep}" not in p]
+
+    # Never publish anything under a templates/ subtree. Templates ship with
+    # `managed: true` so a freshly-copied page is push-ready; without this
+    # filter the template itself would also be pushable. The segment match is
+    # robust to Obsidian "NN - " sort prefixes so "templates", "02 - templates",
+    # etc. all collapse to the same thing.
+    def _under_templates(path: str) -> bool:
+        rel = os.path.relpath(path, docs_root)
+        return any(_segment_name(seg) == "templates" for seg in rel.split(os.sep))
+
+    paths = [p for p in paths if not _under_templates(p)]
     if filt:
         paths = [p for p in paths if filt in p]
     return paths
@@ -154,8 +174,29 @@ def build_plan(
     transport, docs_root: str, state_dir: str, filt: str | None
 ) -> list[PlanItem]:
     plan: list[PlanItem] = []
+    # Build the title map ONCE across the whole docs tree -- a page in any
+    # folder can reference any other via [[Stem]]. md2wiki.convert_file
+    # defaults to scanning the source file's parent, which is too narrow
+    # for cross-folder references.
+    title_map = mdcommon.build_title_map(Path(docs_root))
     for src in discover(docs_root, filt):
-        page = md2wiki.convert_file(src)
+        # Cheap front-matter peek: we only want to RUN md2wiki on pages we
+        # intend to publish. Unmanaged drafts may contain content that
+        # md2wiki rejects (rare but real -- e.g. a scraped page with
+        # [[...]]-looking content in an indented code block); failing the
+        # whole plan because of an unrelated draft is unhelpful.
+        try:
+            with open(src, encoding="utf-8") as f:
+                head_text = f.read()
+        except OSError:
+            continue
+        try:
+            meta, _ = md2wiki.split_frontmatter(head_text)
+        except ValueError:
+            continue
+        if not meta.get("managed", False):
+            continue
+        page = md2wiki.convert_file(src, title_map=title_map)
         if not page.managed:
             continue
         ghash = sha256(page.wikitext)
@@ -196,6 +237,44 @@ def print_plan(plan: list[PlanItem]) -> None:
 PUSHABLE = {CREATE, UPDATE}
 FORCEABLE = {DRIFT, ADOPT_CONFLICT, DELETED_ON_WIKI}
 
+# Default location of media files referenced from a page, relative to the
+# page's own folder. Matches the scrape_wiki / Obsidian convention.
+MEDIA_SUBDIR = "_media"
+
+
+def upload_media_for(transport, item: PlanItem, summary: str) -> int:
+    """Upload every File: reference in ``item.page.wikitext`` from the
+    sibling ``_media/`` folder. SHA-1 skip-if-unchanged.
+
+    Returns the number of failures. Prints one line per file action
+    (CREATE / UPDATE / SKIP / WARN / FAIL).
+    """
+    media_dir = Path(item.source).parent / MEDIA_SUBDIR
+    failures = 0
+    seen: set[str] = set()
+    for basename in mdcommon.extract_file_basenames(item.page.wikitext):
+        if basename in seen:
+            continue  # already handled this file for this page
+        seen.add(basename)
+        local = media_dir / basename
+        if not local.exists():
+            print(f"  WARN  media {basename}: not found at {local}")
+            failures += 1
+            continue
+        try:
+            token = transport.csrf_token()
+            action, _resp = transport.upload_if_changed(
+                filename=basename,
+                path=local,
+                token=token,
+                comment=summary,
+            )
+            print(f"  {action:<6}  media {basename}")
+        except Exception as e:  # noqa: BLE001 -- network/wiki errors vary
+            print(f"  FAIL  media {basename}: {e}")
+            failures += 1
+    return failures
+
 
 def apply_plan(
     transport,
@@ -211,6 +290,16 @@ def apply_plan(
         do_push = p.action in PUSHABLE or (force and p.action in FORCEABLE)
         if not do_push:
             print(f"  skip  {p.title} [{p.action}]")
+            continue
+        # Upload referenced media FIRST so the edited page never references
+        # a missing file (even briefly between edit and uploads).
+        media_failures = upload_media_for(transport, p, summary)
+        if media_failures:
+            print(
+                f"  abort {p.title}: {media_failures} media upload(s) failed; "
+                f"skipping page edit so the wiki doesn't show red File: refs"
+            )
+            failures += media_failures
             continue
         token = transport.csrf_token()
         create_only = (p.action == CREATE) and not force
@@ -255,7 +344,7 @@ def apply_plan(
 
 def main() -> None:
     ap = argparse.ArgumentParser(description="Publish managed Markdown to the wiki.")
-    ap.add_argument("--docs-root", default="pages/content")
+    ap.add_argument("--docs-root", default="pages")
     ap.add_argument("--state-dir", default=".wikisync")
     ap.add_argument("--filter", dest="filt", default=None)
     ap.add_argument(
