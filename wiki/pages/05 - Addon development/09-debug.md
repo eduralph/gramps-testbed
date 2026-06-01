@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Debug"
+title: Gramps 6.0 Wiki Manual - Addon Development - Debug
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -45,7 +45,7 @@ LOG.error("Could not parse %s", filename)
 
 `__name__` for an addon resolves to the addon's `id` (e.g. `"MyAddon.myaddon"`), so the logger inherits the addon's name naturally — useful for per-logger filtering below.
 
-**Don't use `print()`.** It bypasses both surfaces and breaks under windowed launches that have no terminal attached. The [15-rules](15-rules.md#runtime) page makes this a hard rule.
+**Don't use `print()`.** It bypasses both surfaces and breaks under windowed launches that have no terminal attached. The [15-guidelinesN-guidelines.md#runtime) page makes this a hard rule.
 
 ## Default log levels
 
@@ -184,7 +184,7 @@ On the next save, a profile report goes to stdout: per-function call counts and 
 - [05-fundamentals → Logging](05-fundamentals.md#logging) — the conventions for setting up the logger in the first place.
 - [08-testing](08-testing.md) — formalising a repro script into a regression test.
 - [10-troubleshoot](10-troubleshoot.md) — symptom-first guide to the failure modes these tools surface.
-- [15-rules](15-rules.md) — the rules around logging and diagnostics (logger over `print`, etc.).
+- [15-guidelinesN-guidelines.md) — the rules around logging and diagnostics (logger over `print`, etc.).
 - [Debugging Gramps](wiki:Debugging_Gramps) — the standalone wiki page; primary scraped source.
 - [Logging system](wiki:Logging_system) — the deeper reference for Gramps' logging configuration.
 

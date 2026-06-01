@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Troubleshoot"
+title: Gramps 6.0 Wiki Manual - Addon Development - Troubleshoot
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -22,7 +22,7 @@ managed: false
 
 The failure modes that bite first-time addon authors, organised by symptom. Each entry is "what you see → why → what to do." Read this sideways: jump to the symptom that matches what you're seeing, follow the link out to the relevant chapter for the fix in depth.
 
-For technique-level coverage (pdb, gdb, profilers), see [09-debug](09-debug.md). For the normative rules an addon must satisfy, see [15-rules](15-rules.md).
+For technique-level coverage (pdb, gdb, profilers), see [09-debug](09-debug.md). For the normative rules an addon must satisfy, see [15-guidelinesN-guidelines.md).
 
 ## Loading and discovery
 
@@ -32,7 +32,7 @@ The addon failed to register. Three usual causes, in order of likelihood:
 
 1. **`.gpr.py` raised at import.** Plugin discovery executes every `.gpr.py` at startup; a `SyntaxError` or import failure there silently drops the addon from the catalog. Launch from a terminal to see the traceback on stderr, or check the Gramps log window (Help → Log) for the failure entry.
 
-2. **`gramps_target_version` mismatch.** A `6.0` addon won't load in 6.1, and vice versa. Plugin discovery silently skips the registration entry. See [13-compatibility → `gramps_target_version` semantics](13-compatibility.md#gramps_target_version-semantics).
+2. **`gramps_target_version` mismatch.** A `6.0` addon won't load in 6.1, and vice versa. Plugin discovery silently skips the registration entry. See [13-compatibility → `gramps_target_version` semanticsL-compatibility.md#gramps_target_version-semantics).
 
 3. **`id` doesn't match the folder name.** The addon's folder name and the `id` argument to `register(...)` must be identical. Gramps does not match by content — it matches by folder name and verifies against `id`. A mismatch silently drops the entry.
 
@@ -42,7 +42,7 @@ The fastest check: in a Python REPL with `gramps` on `sys.path`, `exec(open("MyA
 
 The user plugin directory (`~/.local/share/gramps/gramps60/plugins/…`) is the auto-sync **target**. Edits there are silently overwritten on the next save from `addons-source/`.
 
-**The fix.** Edit in `addons-source/<Addon>/` and let the sync flow do its job — see [12-packaging → Editing `addons-source/`, not the live plugin directory](12-packaging.md#editing-addons-source-not-the-live-plugin-directory).
+**The fix.** Edit in `addons-source/<Addon>/` and let the sync flow do its job — see [12-packaging → Editing `addons-source/`, not the live plugin directoryK-packaging.md#editing-addons-source-not-the-live-plugin-directory).
 
 On Gramps 6.1+ Linux/macOS, symlinking the working tree into the user plugin directory once eliminates the copy step (commit `9443dcbb30`); on Gramps 6.0 and on Windows generally, the copy / `rsync` loop remains.
 
@@ -50,7 +50,7 @@ On Gramps 6.1+ Linux/macOS, symlinking the working tree into the user plugin dir
 
 The most common variants of the previous symptom, when ruled out:
 
-- **6.0 only**: the folder is reached via a symlink. Gramps 6.0 plugin discovery does **not** follow symlinks; use a physical copy or upgrade to 6.1+. (See [13-compatibility → Plugin discovery follows symlinks](13-compatibility.md#plugin-discovery-follows-symlinks).)
+- **6.0 only**: the folder is reached via a symlink. Gramps 6.0 plugin discovery does **not** follow symlinks; use a physical copy or upgrade to 6.1+. (See [13-compatibility → Plugin discovery follows symlinksL-compatibility.md#plugin-discovery-follows-symlinks).)
 - **Windows, any version**: same as above — the 6.1 symlink test is skipped on Windows because the platform's symlink behaviour is inconsistent without elevated privileges. Physical copy.
 - **`.gpr.py` not at top level of folder**: the registration file has to be `<Addon>/<Addon>.gpr.py`, not in a subfolder.
 
@@ -99,7 +99,7 @@ If `find_spec` returns `None`, the name in `requires_mod` is wrong.
 
 GExiv2's version handling was rewritten on `maintenance/gramps61` only (addons-source PR [829](https://github.com/gramps-project/addons-source/pull/829)). An addon with `requires_gi=[("GExiv2", "0.10")]` that works on 6.0 may need a different pin on 6.1.
 
-**The fix.** Read the EditExifMetadata addon's GExiv2 code on the target branch before assuming a pin transfers. See [13-compatibility → GExiv2 version handling rewritten](13-compatibility.md#gexiv2-version-handling-rewritten).
+**The fix.** Read the EditExifMetadata addon's GExiv2 code on the target branch before assuming a pin transfers. See [13-compatibility → GExiv2 version handling rewrittenL-compatibility.md#gexiv2-version-handling-rewritten).
 
 ## Database access
 
@@ -188,7 +188,7 @@ Pre-commit catches static checks only. Test failures (e.g. an import that breaks
 gh pr checks <PR#> --watch
 ```
 
-See [15-rules → Verification before commit](15-rules.md#verification-before-commit).
+See [16-guidelines → Verification before commitN-guidelines.md#verification-before-commit).
 
 ## Pull-request shape
 
@@ -200,21 +200,21 @@ addons-source PRs do **not** bump the addon's `version` field. The maintainer ma
 
 Two things to check:
 
-1. **Branch target.** `addons-source` PRs target `maintenance/gramps60`, not `master`. Gary cherry-picks forward to `gramps61`. Core PRs target `maintenance/gramps61`. A PR against the wrong branch may sit untouched waiting for retargeting. See [15-rules → Contributor workflow](15-rules.md#contributor-workflow).
+1. **Branch target.** `addons-source` PRs target `maintenance/gramps60`, not `master`. Gary cherry-picks forward to `gramps61`. Core PRs target `maintenance/gramps61`. A PR against the wrong branch may sit untouched waiting for retargeting. See [16-guidelines → Contributor workflowN-guidelines.md#contributor-workflow).
 
 2. **PR body shape.** Reviewers expect *Root cause / Fix / Verified against / Test*. A PR body that skips one of those sections often returns without a substantive review until it conforms.
 
 ### "PR was rejected as duplicate."
 
-You wrote a fix without checking that upstream already had one in flight. The pre-flight check is [15-rules → Contributor workflow](15-rules.md#contributor-workflow) — the bullets about "check upstream isn't ahead" and "if a PR already exists, VERIFY it, do not duplicate." Searching by **affected file path**, not just the bug number, is the part that catches the most duplicates.
+You wrote a fix without checking that upstream already had one in flight. The pre-flight check is [16-guidelines → Contributor workflowN-guidelines.md#contributor-workflow) — the bullets about "check upstream isn't ahead" and "if a PR already exists, VERIFY it, do not duplicate." Searching by **affected file path**, not just the bug number, is the part that catches the most duplicates.
 
 ## See also
 
 - [09-debug](09-debug.md) — technique-level coverage for reproducing what these symptoms describe.
 - [08-testing](08-testing.md) — the test conventions that catch many of these symptoms before they reach a user.
-- [12-packaging](12-packaging.md) — the source-to-distribution flow, where the "edits disappeared" trap lives.
-- [13-compatibility](13-compatibility.md) — the 6.0 vs 6.1 deltas behind several entries here.
-- [15-rules](15-rules.md) — normative reference; this chapter describes what *goes wrong*, that chapter describes what *must hold*.
+- [12-packagingK-packaging.md) — the source-to-distribution flow, where the "edits disappeared" trap lives.
+- [13-compatibilityL-compatibility.md) — the 6.0 vs 6.1 deltas behind several entries here.
+- [15-guidelinesN-guidelines.md) — normative reference; this chapter describes what *goes wrong*, that chapter describes what *must hold*.
 - [Mantis bug tracker](https://gramps-project.org/bugs) — where the recurring failures get filed.
 
 <!--wiki:{{stub}}-->

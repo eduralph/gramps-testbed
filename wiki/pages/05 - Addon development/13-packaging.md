@@ -1,17 +1,17 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Packaging"
+title: Gramps 6.0 Wiki Manual - Addon Development - Packaging
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
   This page covers the source-to-distribution PIPELINE only. The normative
   rules for contributors (branch targeting, version-field discipline, PR
   body shape, Mantis trailers, test-with-fix requirement) live in
-  [[15-rules]] so there is one source of truth — link there, don't restate.
+  [[16-guidelines]] so there is one source of truth — link there, don't restate.
 
   Authoritative scraped source:
   ../04 - Technical Documentation/addons-development.md (sections
@@ -26,7 +26,7 @@ managed: false
 
 From "works on my machine" to "users can install it from the addon manager." This chapter is the source-to-distribution pipeline: how `addons-source` becomes a `.addon.tgz` in `addons`, how the in-app addon manager picks it up, and what to send upstream.
 
-The normative *rules* a submission must satisfy (branch targeting, version-field discipline, PR body shape, Mantis trailers) live in [15-rules](15-rules.md). This page covers the *workflow* — what to run, what files appear, where they end up.
+The normative *rules* a submission must satisfy (branch targeting, version-field discipline, PR body shape, Mantis trailers) live in [15-guidelinesN-guidelines.md). This page covers the *workflow* — what to run, what files appear, where they end up.
 
 ## The three repositories
 
@@ -86,7 +86,7 @@ git checkout -b gramps60 origin/maintenance/gramps60     # for 6.0
 
 The branch you check out in `addons-source` determines which Gramps minor your built addons target — `make.py` reads the branch name to pick the output directory inside `addons/`.
 
-See [13-compatibility](13-compatibility.md) for branch-targeting guidance per Gramps minor.
+See [13-compatibilityL-compatibility.md) for branch-targeting guidance per Gramps minor.
 
 ## Build prerequisites
 
@@ -215,7 +215,7 @@ git add gramps60/download/<Addon>.addon.tgz
 git add gramps60/listings/*
 git commit -m "Add <Addon> for Gramps 6.0"
 
-# Push when you have write access — see [15-rules] for the review gate.
+# Push when you have write access — see [16-guidelines] for the review gate.
 ```
 
 The in-app addon manager hits the `addons` repo over HTTPS and shows the addon to users on their next "Check for updates" cycle.
@@ -257,7 +257,7 @@ git add <Addon>
 git commit -m "Add <Addon>: <one-line description>"
 ```
 
-Open the PR against the **correct branch** — for an addon targeting Gramps 6.0, that's `maintenance/gramps60`, which the maintainer cherry-picks forward to `gramps61` (see [15-rules → Contributor workflow](15-rules.md#contributor-workflow) for the full submission shape).
+Open the PR against the **correct branch** — for an addon targeting Gramps 6.0, that's `maintenance/gramps60`, which the maintainer cherry-picks forward to `gramps61` (see [16-guidelines → Contributor workflowN-guidelines.md#contributor-workflow) for the full submission shape).
 
 ## Update an existing addon
 
@@ -277,15 +277,15 @@ git add <Addon>
 git commit -m "<Addon>: <what changed>"
 ```
 
-The `version` field in `<Addon>.gpr.py` **stays untouched** in PRs — the maintainer manages versions centrally. (See [15-rules](15-rules.md#contributor-workflow); this came up on PR 911 where a bump was rejected.)
+The `version` field in `<Addon>.gpr.py` **stays untouched** in PRs — the maintainer manages versions centrally. (See [15-guidelinesN-guidelines.md#contributor-workflow); this came up on PR 911 where a bump was rejected.)
 
 ## See also
 
 - [01-overview](01-overview.md) — what an addon is.
 - [05-fundamentals → Translation](05-fundamentals.md#translation) — the `_()` injection that makes per-addon `.po` files load.
 - [08-testing](08-testing.md) — what to put in `tests/` before packaging.
-- [13-compatibility](13-compatibility.md) — picking the right Gramps minor and branch for your addon.
-- [15-rules](15-rules.md) — the normative rules a PR must satisfy.
+- [13-compatibilityL-compatibility.md) — picking the right Gramps minor and branch for your addon.
+- [15-guidelinesN-guidelines.md) — the normative rules a PR must satisfy.
 - [Addons development](wiki:Addons_development) — the standalone wiki page; primary scraped source for this chapter.
 - [addons-source CONTRIBUTING.md](https://github.com/gramps-project/addons-source/blob/maintenance/gramps60/CONTRIBUTING.md) — the addons-source-side contributor guide.
 

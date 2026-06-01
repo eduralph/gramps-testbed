@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Fundamentals"
+title: Gramps 6.0 Wiki Manual - Addon Development - Fundamentals
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--

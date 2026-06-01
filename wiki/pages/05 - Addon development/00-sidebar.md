@@ -1,6 +1,6 @@
 ---
-title: "Addon Development — Sidebar"
-managed: false
+title: Addon Development — Sidebar
+managed: true
 ---
 
 <!--
@@ -30,11 +30,13 @@ managed: false
 9. [[09-debug]] — Gramps debug mode, log levels, repro scripts that bypass the GUI, `PrerequisitesCheckerGramplet`.
 10. [[10-troubleshoot]] — common failure modes: silent reload, no-symlinks rule, namespace-package binding traps, `requires_mod` vs PyPI name.
 11. [[11-code-analysis]] — Black, ruff E9/F63/F7/F82, `ast.parse`, mypy (for core); what the per-repo pre-commits enforce.
-12. [[12-packaging]] — `make.py`, `addons-source` -> `addons` flow, version-field rules, submitting to upstream.
-13. [[13-compatibility]] — porting across Gramps versions; `gramps_target_version`; deprecated API surface; gramps60 vs gramps61 deltas.
-14. [[14-whats-new]] — per-Gramps-version API changes that affect addons.
-15. [[15-rules]] — normative MUST / SHOULD / MAY reference for addons and the contributor workflow. The page to cite in code review.
-16. [[16-roadmap]] — forward-looking: in-flight changes, deprecations, open questions, and the documentation roadmap itself. Prospective counterpart to *What's new*.
+12. [[12-internationalization]] — i18n, translations, gettext, _() / N_() handling, .po/.pot generation for addons.
+13. [[13-packaging]] — `make.py`, `addons-source` -> `addons` flow, version-field rules, submitting to upstream.
+14. [[14-compatibility]] — porting across Gramps versions; `gramps_target_version`; deprecated API surface; gramps60 vs gramps61 deltas.
+15. [[15-whats-new]] — per-Gramps-version API changes that affect addons.
+16. [[16-guidelines]] — normative MUST / SHOULD / MAY reference for addons and the contributor workflow. The page to cite in code review.
+17. [[17-roadmap]] — forward-looking: in-flight changes, deprecations, open questions, and the documentation roadmap itself. Prospective counterpart to *What's new*.
+
 
 ## Status
 

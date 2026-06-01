@@ -245,86 +245,9 @@ In other code that might use this config file, you would do this:
 
 ### Localization
 
-For general help on translations in Gramps, see [Coding for translation](wiki:Coding_for_translation). However, that will only use translations that come with Gramps, or allows you to contribute translations to the Gramps core. To have your own managed translations that will be packaged with your addon, read the rest of this page. Note that these instructions will only work for Python strings, if you have a glade file, it will not get translated.
+For managing translations that will be packaged with your addon (including extraction, gettext initialization, string marking, and `make.py` compilation), please see the dedicated [Addon Internationalization](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Internationalization) guide.
 
-For any addon which you have translations into other languages, you will need to add a way to retrieve the translation. You need to add this to the top of your NewProjectName.py file:
-
-`from gramps.gen.const import GRAMPS_LOCALE as glocale`  
-` _ = glocale.get_addon_translator(__file__).gettext`
-
-Then you can use the standard "\_()" function to translate phrases in your addon.
-
-You can use one of a few different types of translation functions:
-
-1.  gettext
-2.  lgettext
-3.  ngettext
-4.  lngettext
-5.  sgettext
-
-These have become obsolete in Gramps 4; gettext, ngettext, and sgettext always return translated strings in unicode for consistent portability between Python 2 and Python3.
-
-See the [python documentation](http://docs.python.org/3/library/gettext.html#the-gnutranslations-class) for documentation of gettext and ngettext. The "l" versions return the string encoded according to the [currently set locale](http://docs.python.org/3/library/locale.html#locale.setlocale); the "u" versions return unicode strings in Python2 and are not available in Python 3.
-
-**sgettext** is a Gramps extension that filters out clarifying comments for translators, such as
-
-`_("Remaining names | rest")`
-
-Where "rest" is the English string that we want to present and "Remaining names" is a hint for translators.
-
-#### Commands to compile translations
-
-To build and compile translations for all projects to their download/Addon.addon.tgz files:
-
-  
-`python3 make.py gramps`` build all`
-
-To compile translations for all projects :
-
-  
-`python3 make.py gramps`` compile all`
-
-## Create a Gramps Plugin Registration file
-
-First, create the NewProjectName.gpr.py file. The registration takes this general form:
-
-    register(PTYPE,
-         gramps_target_version = "6.0",
-         version = "1.0.0",
-         ATTR = value,
-    )
-
-[PTYPE](https://github.com/gramps-project/gramps/blob/master/gramps/gen/plug/_pluginreg.py#L76) values include: TOOL, GRAMPLET, REPORT, QUICKVIEW (formerly QUICKREPORT), IMPORT, EXPORT, DOCGEN, GENERAL, MAPSERVICE, VIEW, RELCALC, SIDEBAR, DATABASE, RULE, THUMBNAILER, and CITE.
-
-ATTR depends on the PTYPE. But you must have **gramps_target_version** and addon **version**. **gramps_target_version** should be a string of the form "X.Y" version number matching Gramps X major, Y minor integer. **version** is a string of the form "X.Y.Z" representing the version of your addon. X, Y, and Z should all be integers.
-
-Be sure to include attributes for author name(s) and email(s) in the form of an array of comma-separated strings.
-
-There is an additional set of attributes, **maintainers** and **maintainers_email**. If you, the author, are also the maintainer it will be identical to the author attributes, but you may also designate a maintainer, in which case the maintainer will become the primary point of contact.
-
-Here is a sample Tool GPR file:
-
-    register(TOOL, 
-             id    = 'AttachSource',
-             name  = _("Attach Source"),
-             description =  _("Attaches a shared source to multiple objects."),
-             version = '1.0.0',
-             gramps_target_version = '6.0',
-             status = STABLE,
-             fname = 'AttachSourceTool.py',
-             authors = ["Douglas S. Blank"],
-             authors_email = ["doug.blank@gmail.com"],
-             maintainers = ["Douglas S. Blank"],
-             maintainers_email = ["doug.blank@gmail.com"],
-             category = TOOL_DBPROC,
-             toolclass = 'AttachSourceWindow',
-             optionclass = 'AttachSourceOptions',
-             tool_modes = [TOOL_MODE_GUI]
-             )
-
-You can see examples of the kinds of addons [here](https://github.com/gramps-project/gramps/plugins) (for example, see [gramps/plugins/drawreport/drawplugins.gpr.py](https://github.com/gramps-project/gramps/plugins/drawreport/drawplugins.gpr.py)) and see the full documentation in the [master/gramps/gen/plug/\_pluginreg.py](https://github.com/gramps-project/gramps/blob/3f0db9303f29811b43325c30149c8844c7ce24b6/gramps/gen/plug/_pluginreg.py#L23) comments and docstrings.
-
-Note that this .gpr.py will automatically use translations if you have them (see below). That is, the function "\_" is predefined to use your locale translations; you only need to mark the text with \_("TEXT") and include a translation of "TEXT" in your translation file. For example, in the above example, \_("Attach Source") is marked for translation. If you have developed and packaged your addon with translation support, then that phrase will be converted into the user's language.
+For general help on translating the core application, see [Translating Gramps](wiki:Translating_Gramps) and [Coding for translation](wiki:Coding_for_translation).
 
 ### Report plugins
 

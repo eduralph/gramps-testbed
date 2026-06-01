@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Roadmap"
+title: Gramps 6.0 Wiki Manual - Addon Development - Roadmap
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--wiki:{{man index|6.0}}-->
@@ -105,8 +105,8 @@ What the pipeline already handled before these additions:
 - [[06-data-access]] — needs worked examples for each API touch-point.
 - [[07-api-reference]] — needs synchronisation against `gramps/gen/__init__.py` on the maintenance branch this doc set targets.
 - [[08-testing]] — fold in [[01 - preliminary notes/Addon Testing]] and retire the preliminary note.
-- [[09-debug]], [[10-troubleshoot]], [[11-code-analysis]], [[12-packaging]], [[13-compatibility]], [[14-whats-new]] — all outline-stage; need entries.
-- [[15-rules]] — substantive; pending sign-off to flip to `managed: true`.
+- [[09-debug]], [[10-troubleshoot]], [[11-code-analysis]], [[13-packaging]], [[14-compatibility]], [[15-whats-new]] — all outline-stage; need entries.
+- [[16-guidelines]] — substantive; pending sign-off to flip to `managed: true`.
 
 (For the publishing pipeline itself — `publish.py`, `md2wiki.py`, `md2pdf.py --tree` — see the testbed root, not this page.)
 

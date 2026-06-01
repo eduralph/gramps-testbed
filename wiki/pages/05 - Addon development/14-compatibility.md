@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Compatibility"
+title: Gramps 6.0 Wiki Manual - Addon Development - Compatibility
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -43,7 +43,7 @@ addons-source @ maintenance/gramps60: MyAddon/MyAddon.gpr.py declares "6.0"
 addons-source @ maintenance/gramps61: MyAddon/MyAddon.gpr.py declares "6.1"
 ```
 
-A single `make.py gramps60 build MyAddon` on `maintenance/gramps60` produces the 6.0-targeted `.addon.tgz`; the same command with `gramps61` on `maintenance/gramps61` produces the 6.1-targeted one. See [12-packaging](12-packaging.md) for the workflow.
+A single `make.py gramps60 build MyAddon` on `maintenance/gramps60` produces the 6.0-targeted `.addon.tgz`; the same command with `gramps61` on `maintenance/gramps61` produces the 6.1-targeted one. See [12-packagingK-packaging.md) for the workflow.
 
 When the **code is identical** between minors, the maintainer forward-merges the `maintenance/gramps60` branch into `maintenance/gramps61` and rebuilds — no per-minor source maintenance needed.
 
@@ -56,7 +56,7 @@ The rule that determines which branch a fix lands on differs between the two rep
 - **`addons-source/`** → `maintenance/gramps60`. Gary cherry-picks forward to `gramps61`. (Gary Griffin, addons-source PR 915, 2026-05-24.)
 - **`gramps/`** (core) → `maintenance/gramps61`. Fixes and cleanups go on the current production branch and forward-merge to `master`. Only genuinely new-feature work targets `master`. (jralls, gramps#2298.)
 
-A reviewer's instruction on a specific PR overrides the default (e.g. Nick-Hall asking for `master` on gramps#2299). See [15-rules → Contributor workflow](15-rules.md#contributor-workflow) for the normative form.
+A reviewer's instruction on a specific PR overrides the default (e.g. Nick-Hall asking for `master` on gramps#2299). See [16-guidelines → Contributor workflowN-guidelines.md#contributor-workflow) for the normative form.
 
 ## "Applies cleanly" is not "remains correct"
 
@@ -114,8 +114,8 @@ For the actual deprecated surface in the running Gramps, the authoritative refer
 
 - [02-get-started → Where addons live](02-get-started.md#where-addons-live) — the 6.0 vs 6.1 symlink discovery rule, with the dev-loop consequence.
 - [05-fundamentals → The `.gpr.py` registration file](05-fundamentals.md#the-gprpy-registration-file) — `gramps_target_version` declaration in context.
-- [12-packaging](12-packaging.md) — how the per-minor build flow uses `gramps_target_version`.
-- [14-whats-new](14-whats-new.md) — scheduled per-release changes affecting addon authors.
-- [15-rules → Contributor workflow](15-rules.md#contributor-workflow) — normative branch-targeting rules.
+- [12-packagingK-packaging.md) — how the per-minor build flow uses `gramps_target_version`.
+- [14-whats-newM-whats-new.md) — scheduled per-release changes affecting addon authors.
+- [16-guidelines → Contributor workflowN-guidelines.md#contributor-workflow) — normative branch-targeting rules.
 
 <!--wiki:{{stub}}-->
