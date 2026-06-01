@@ -27,7 +27,9 @@ on:
         default: ''
       addons_ref:
         description: 'addons-source branch/tag/sha'
-        default: 'maintenance/gramps61'
+        # gramps60 by default — the branch addons are authored on. Paired
+        # with gramps_ref=gramps61 on purpose; see the Checkout step below.
+        default: 'maintenance/gramps60'
 
 # See interface-tests.yml for rationale — dorny/test-reporter needs
 # checks: write + pull-requests: write, and the repo's default token
@@ -68,11 +70,22 @@ jobs:
           ref: ${{ github.event.inputs.gramps_ref || vars.GRAMPS_REF || 'maintenance/gramps61' }}
           path: gramps
 
+      # DELIBERATE cross-version pairing: addons_ref defaults to
+      # maintenance/gramps60 while gramps_ref (above) stays gramps61. Addons
+      # are authored on gramps60 (addons-source's production branch; the
+      # maintainer cherry-picks forward to gramps61). Running the as-authored
+      # gramps60 addon against fresh gramps61 core is the forward-compat
+      # early-warning this job exists for — it catches pre-cherry-pick
+      # import/ABI breakage that addons-source's own CIs miss (their gramps60
+      # CI runs 60-addon/60-core; their gramps61 CI runs the already-ported
+      # 61 addon). Do NOT "fix" this to 61/61 — that only duplicates the
+      # gramps61 CI and tests the already-forward-ported addon, so it can no
+      # longer be an early warning.
       - name: Checkout addons-source fork
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.addons_source_repo || vars.ADDONS_SOURCE_REPO || format('{0}/addons-source', github.repository_owner) }}
-          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps61' }}
+          ref: ${{ github.event.inputs.addons_ref || vars.ADDONS_SOURCE_REF || 'maintenance/gramps60' }}
           path: addons-source
 
       - name: Install system dependencies
