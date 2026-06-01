@@ -36,6 +36,9 @@ concurrency:
 jobs:
   shape-and-flow:
     runs-on: ubuntu-24.04
+    # Cap a hung analyzer (pyright/semgrep can spin on a pathological input).
+    # The analyzers normally finish in a few minutes; 15 is generous.
+    timeout-minutes: 15
     # ADVISORY at the JOB level — same pattern as unit-tests.yml / addon-unit-tests.yml.
     # `continue-on-error` here makes the WORKFLOW conclusion stay green even when the
     # JOB is red, so findings don't gate merges. The check-run / job conclusion still
