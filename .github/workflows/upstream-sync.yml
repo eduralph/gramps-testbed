@@ -14,8 +14,12 @@ name: Sync Forks from Upstream
 #    divergence outright; a merge commit reconciles cleanly.
 #
 # Requirements: a fine-grained PAT in `secrets.FORK_SYNC_TOKEN` with
-# Contents:write + Pull-requests:write on the eduralph/gramps and
-# eduralph/addons-source repos.
+# Contents:write + Pull-requests:write on this repo owner's gramps and
+# addons-source forks (i.e. ${{ github.repository_owner }}/gramps and
+# .../addons-source). The owner is derived from github.repository_owner
+# so the workflow tracks owner renames automatically — but the PAT scope
+# is configured out-of-band in GitHub settings and must be re-pointed at
+# the new owner's forks when the owner changes.
 
 on:
   schedule:
@@ -30,9 +34,9 @@ jobs:
       matrix:
         repo:
           - name: gramps
-            owner: eduralph
+            owner: ${{ github.repository_owner }}
           - name: addons-source
-            owner: eduralph
+            owner: ${{ github.repository_owner }}
         branch:
           - master
           - maintenance/gramps60
@@ -50,7 +54,7 @@ jobs:
           Without it, the sync workflow cannot push to the forks. To fix:
             1. Create a fine-grained PAT at
                  https://github.com/settings/personal-access-tokens/new
-               scoped to eduralph/gramps + eduralph/addons-source with
+               scoped to this owner's gramps + addons-source forks with
                  Contents: read & write
                  Pull requests: read & write
             2. Add it as a repo secret on this testbed:
