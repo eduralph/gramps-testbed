@@ -25,6 +25,9 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    # Cap a wedged git clone/fetch/merge/push or a hung gh call. The sync
+    # is a handful of git+gh operations per matrix cell; 15min is ample.
+    timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
