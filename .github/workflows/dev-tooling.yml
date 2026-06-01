@@ -58,7 +58,13 @@ jobs:
           repo="${repo:-${{ vars.GRAMPS_REPO }}}"
           ref="${ref:-${{ vars.GRAMPS_REF }}}"
           repo="${repo:-${{ github.repository_owner }}/gramps}"
-          ref="${ref:-maintenance/gramps60}"
+          # gramps61: this job is core-defect analysis (pyright/semgrep over
+          # gramps core source); its findings become CORE PRs, which target
+          # maintenance/gramps61. So it analyzes the branch core fixes land
+          # on — distinct from the addon-conformance jobs (which pair gramps60
+          # addons against gramps61 core). Analyzing gramps60 here would flag
+          # against code the fixes won't be written on.
+          ref="${ref:-maintenance/gramps61}"
           echo "repo=$repo" >> "$GITHUB_OUTPUT"
           echo "ref=$ref"   >> "$GITHUB_OUTPUT"
           echo "Analyzing $repo @ $ref"
@@ -129,7 +135,7 @@ jobs:
   #     - uses: actions/checkout@v4
   #       with:
   #         repository: ${{ github.repository_owner }}/gramps
-  #         ref: maintenance/gramps60
+  #         ref: maintenance/gramps61   # core-analysis branch; see Resolve step
   #     - uses: github/codeql-action/init@v3
   #       with:
   #         languages: python
