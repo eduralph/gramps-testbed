@@ -245,13 +245,30 @@ jobs:
               fail=1
               continue
             fi
+            rc=0
             (
               cd "$ws_posix/addons-source"
               GRAMPS_RESOURCES="$gramps_resources_win" \
                 python -m xmlrunner "${modules[@]}" \
                   -o "$(cygpath -w "$out_dir")" \
                   -v
-            ) || fail=1
+            ) || rc=$?
+            # Coverage accounting from the JUnit XML — identical guard to the
+            # Linux job (addon-unit-tests.yml): a wholly-skipped module still
+            # exits 0, so exit-code-only would call it PASS. A Windows addon
+            # whose requires_mod failed to install and whose tests all skip
+            # would otherwise report green. cygpath -w because the
+            # MSYS2-native Python reads Windows paths (same reason the
+            # xmlrunner -o above uses it).
+            read -r t s < <(python \
+              "$(cygpath -w "$ws_posix/gramps-testbed/scripts/lib/junit_coverage.py")" \
+              "$(cygpath -w "$out_dir")")
+            if [ "$rc" -ne 0 ]; then
+              fail=1
+            elif [ "${t:-0}" -gt 0 ] && [ "${s:-0}" -eq "${t:-0}" ]; then
+              echo "::error::$addon: all ${t} tests skipped (degraded coverage)"
+              fail=1
+            fi
           done
           exit $fail
 
