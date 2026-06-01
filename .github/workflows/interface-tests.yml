@@ -140,16 +140,11 @@ jobs:
 
       - name: Compile Gramps translations
         # pip install -e skips setup.py build, so Gramps' build/mo dir is
-        # empty. Compile .po → .mo directly with msgfmt so launched Gramps
-        # finds its translations instead of falling back with a warning.
-        working-directory: gramps
-        run: |
-          for po in po/*.po; do
-            lang=$(basename "$po" .po)
-            dest="build/mo/$lang/LC_MESSAGES"
-            mkdir -p "$dest"
-            msgfmt "$po" -o "$dest/gramps.mo"
-          done
+        # empty. The composite action compiles .po → .mo directly so launched
+        # Gramps finds its translations instead of falling back with a warning.
+        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
+        with:
+          gramps-path: gramps
 
       # Bulk addon install is intentionally skipped for the smoke suite:
       # make.py mutates tracked .gpr.py files, and installing all 149 addons
