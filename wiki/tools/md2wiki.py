@@ -42,8 +42,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import yaml
-
+# yaml is imported lazily inside split_frontmatter -- the only function here
+# that needs it. Keeping it lazy lets tests that don't touch frontmatter
+# (or that mock split_frontmatter) run in environments without pyyaml.
 import mdcommon
 
 FM_RE = re.compile(r"^---\n(.*?)\n---\n?(.*)$", re.DOTALL)
@@ -67,6 +68,8 @@ class ConvertedPage:
 
 
 def split_frontmatter(text: str) -> tuple[dict, str]:
+    import yaml  # noqa: PLC0415 -- lazy so tests without pyyaml can import the module
+
     m = FM_RE.match(text)
     if not m:
         raise ValueError("no YAML front-matter found (file must start with '---')")
@@ -128,14 +131,27 @@ def convert_text(
     source: str = "<string>",
     *,
     title_map: dict[str, str] | None = None,
+    title_prefix: str = "",
+    inbatch_canonical_titles: set[str] | None = None,
+    strip_categories: bool = False,
 ) -> ConvertedPage:
     """Convert one page's Markdown to MediaWiki wikitext.
 
-    ``title_map`` resolves Obsidian-internal ``[[Page]]`` references; when
-    omitted, ``[[Page]]`` references in the body raise ``ValueError`` so a
-    silently-broken link can't slip through. Build the map with
-    ``mdcommon.build_title_map`` (or via ``convert_file`` / ``convert_dir``
-    which build it automatically).
+    ``title_map`` resolves Obsidian-internal ``[[Page]]`` references AND
+    relative ``[label](XX.md)`` links; when omitted, either flavour raises
+    ``ValueError`` so a silently-broken link can't slip through. Build the
+    map with ``mdcommon.build_title_map`` (or via ``convert_file`` /
+    ``convert_dir`` which build it automatically).
+
+    ``title_prefix`` (e.g. ``"User:Eduralph/Sandbox/"``) is prepended to the
+    returned page title AND to any ``wiki:`` link target whose page is in
+    ``inbatch_canonical_titles`` -- typically the set of canonical titles
+    being published in the same run. Out-of-batch ``wiki:`` links are left
+    alone so genuine cross-wiki references keep resolving correctly.
+
+    ``strip_categories`` drops the ``[[Category:X]]`` trailers; useful for
+    sandbox / User-namespace pushes that otherwise would add the User page
+    to those public categories.
     """
     meta, body = split_frontmatter(text)
     title = meta.get("title")
@@ -157,6 +173,21 @@ def convert_text(
                 f"title_map was provided -- pass title_map=mdcommon.build_title_map(...)"
             )
         body = mdcommon.convert_obsidian_internal_links(body, title_map)
+    if mdcommon.RELATIVE_MD_LINK_RE.search(body):
+        if title_map is None:
+            raise ValueError(
+                f"{source}: contains relative .md links but no title_map "
+                f"was provided -- pass title_map=mdcommon.build_title_map(...)"
+            )
+        body = mdcommon.convert_relative_md_links(body, title_map)
+    # Apply the sandbox prefix to in-batch wiki: targets. Operates on the
+    # uniform `wiki:` form, so it covers all three sources of wiki: links:
+    # the Obsidian [[Page]] conversion above, the relative .md conversion
+    # above, and the [label](wiki:Foo) form authored directly in the source.
+    if title_prefix and inbatch_canonical_titles:
+        body = mdcommon.prefix_inbatch_wiki_links(
+            body, inbatch_canonical_titles, title_prefix
+        )
     body = mdcommon.unstash_html_comments(body, comment_tokens)
     body = mdcommon.unstash_code(body, code_tokens)
 
@@ -171,13 +202,13 @@ def convert_text(
     cats = meta.get("categories") or []
     if isinstance(cats, str):
         cats = [cats]
-    if cats:
+    if cats and not strip_categories:
         wikitext += "\n\n" + "\n".join(f"[[Category:{c}]]" for c in cats)
 
     return ConvertedPage(
-        title=title,
+        title=(title_prefix + title) if title_prefix else title,
         managed=bool(meta.get("managed", False)),
-        categories=list(cats),
+        categories=([] if strip_categories else list(cats)),
         wikitext=normalize(wikitext),
         source=source,
         frontmatter=meta,
@@ -188,6 +219,9 @@ def convert_file(
     path: str,
     *,
     title_map: dict[str, str] | None = None,
+    title_prefix: str = "",
+    inbatch_canonical_titles: set[str] | None = None,
+    strip_categories: bool = False,
 ) -> ConvertedPage:
     """Convert a single .md file.
 
@@ -195,12 +229,22 @@ def convert_file(
     directory -- enough to resolve sibling-page ``[[Page]]`` references in
     the common single-page case. For multi-folder vaults, build the map at
     the docs-root and pass it explicitly.
+
+    See :func:`convert_text` for the meaning of ``title_prefix``,
+    ``inbatch_canonical_titles``, and ``strip_categories``.
     """
     src = Path(path)
     if title_map is None:
         title_map = mdcommon.build_title_map(src.parent)
     with open(path, encoding="utf-8") as f:
-        return convert_text(f.read(), source=path, title_map=title_map)
+        return convert_text(
+            f.read(),
+            source=path,
+            title_map=title_map,
+            title_prefix=title_prefix,
+            inbatch_canonical_titles=inbatch_canonical_titles,
+            strip_categories=strip_categories,
+        )
 
 
 def normalize(wikitext: str) -> str:
@@ -218,9 +262,81 @@ def main() -> None:
         action="store_true",
         help="emit title/categories/managed/wikitext as JSON",
     )
+    ap.add_argument(
+        "--title-prefix",
+        default="",
+        help=(
+            'prepend to the page title and to in-batch wiki: link targets, '
+            'e.g. "User:Eduralph/Sandbox/". When set, the in-batch set is '
+            "built by scanning --inbatch-from (defaults to the source file's "
+            "parent directory)."
+        ),
+    )
+    ap.add_argument(
+        "--inbatch-from",
+        default=None,
+        help=(
+            "directory to scan for managed: true pages, whose canonical titles "
+            "become the 'in-batch' set for --title-prefix rewriting. Defaults "
+            "to the source file's parent directory. Ignored when "
+            "--title-prefix is empty."
+        ),
+    )
+    ap.add_argument(
+        "--strip-categories",
+        action="store_true",
+        help=(
+            "drop [[Category:X]] trailers. Mirrors publish.py behaviour: "
+            "auto-on when --title-prefix starts with 'User:'; this flag "
+            "forces it on otherwise."
+        ),
+    )
+    ap.add_argument(
+        "--keep-categories",
+        action="store_true",
+        help="keep [[Category:X]] trailers even under a User: title prefix",
+    )
     args = ap.parse_args()
+
+    if args.strip_categories and args.keep_categories:
+        sys.exit("md2wiki: --strip-categories and --keep-categories are mutually exclusive")
+
+    # Mirror publish.py: auto-strip categories for User-namespace prefixes
+    # unless overridden by --keep-categories. Explicit --strip-categories
+    # forces it on regardless of prefix.
+    strip_categories = args.strip_categories or (
+        args.title_prefix.startswith("User:") and not args.keep_categories
+    )
+
+    inbatch: set[str] | None = None
+    title_map = None
+    if args.title_prefix or args.inbatch_from:
+        # One knob: --inbatch-from (default: source's parent) drives BOTH
+        # the title_map (so cross-folder [[Page]] / .md links resolve) and
+        # the in-batch set (canonical titles of managed pages in scope, for
+        # the wiki: prefix rewrite). Mirrors publish.build_plan's logic so
+        # the spot-check output matches what the full publish would produce.
+        scan_dir = Path(args.inbatch_from) if args.inbatch_from else Path(args.path).parent
+        title_map = mdcommon.build_title_map(scan_dir)
+        inbatch = set()
+        for md in sorted(scan_dir.rglob("*.md")):
+            try:
+                with open(md, encoding="utf-8") as f:
+                    head = f.read()
+                meta, _ = split_frontmatter(head)
+            except (OSError, ValueError):
+                continue
+            if meta.get("managed", False) and meta.get("title"):
+                inbatch.add(str(meta["title"]))
+
     try:
-        page = convert_file(args.path)
+        page = convert_file(
+            args.path,
+            title_map=title_map,
+            title_prefix=args.title_prefix,
+            inbatch_canonical_titles=inbatch,
+            strip_categories=strip_categories,
+        )
     except Exception as e:
         sys.exit(f"md2wiki: {args.path}: {e}")
     if args.json:

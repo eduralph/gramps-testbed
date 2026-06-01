@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Testing"
+title: Gramps 6.0 Wiki Manual - Addon Development - Testing
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -170,7 +170,7 @@ class IntegrationTests(unittest.TestCase):
         self.assertGreater(len(result), 0)
 ```
 
-Name these `test_integration_*.py` so CI scopes them to Linux only (loading a real DB is heavier, and Windows CI's Gramps setup is separately constrained — see [13-compatibility → Windows toolchain migrated to UCRT64](13-compatibility.md#windows-toolchain-migrated-to-ucrt64)).
+Name these `test_integration_*.py` so CI scopes them to Linux only (loading a real DB is heavier, and Windows CI's Gramps setup is separately constrained — see [13-compatibility → Windows toolchain migrated to UCRT64L-compatibility.md#windows-toolchain-migrated-to-ucrt64)).
 
 ### Choosing between them
 
@@ -224,7 +224,7 @@ A failed import at module load — instead of a `skipUnless` — turns into a te
 
 Mandatory:
 
-- **The bug a fix closes.** Every bug fix ships with a test that fails pre-fix and passes post-fix. This is a [15-rules MUST](15-rules.md#testing). Doc-only PRs are the only exception.
+- **The bug a fix closes.** Every bug fix ships with a test that fails pre-fix and passes post-fix. This is a [16-guidelines MUSTN-guidelines.md#testing). Doc-only PRs are the only exception.
 
 Strongly recommended:
 
@@ -264,7 +264,7 @@ python3 -m unittest MyAddon.tests.test_myaddon
 
 The Python that runs the tests needs `gramps` importable. The simplest setup is `PYTHONPATH=/path/to/gramps python3 -m unittest …`; if Gramps is installed system-wide, the import resolves without `PYTHONPATH`.
 
-On Windows, run from the MSYS2 UCRT64 shell against a UCRT64-installed Gramps — the AIO build for Gramps 6.1+ targets UCRT64; Gramps 6.0 isn't Windows-tested upstream. See [13-compatibility → Windows toolchain migrated to UCRT64](13-compatibility.md#windows-toolchain-migrated-to-ucrt64).
+On Windows, run from the MSYS2 UCRT64 shell against a UCRT64-installed Gramps — the AIO build for Gramps 6.1+ targets UCRT64; Gramps 6.0 isn't Windows-tested upstream. See [13-compatibility → Windows toolchain migrated to UCRT64L-compatibility.md#windows-toolchain-migrated-to-ucrt64).
 
 ## See also
 
@@ -273,7 +273,7 @@ On Windows, run from the MSYS2 UCRT64 shell against a UCRT64-installed Gramps �
 - [09-debug](09-debug.md) — turning a repro script into a test.
 - [10-troubleshoot](10-troubleshoot.md) — the symptoms these tests catch in CI rather than production.
 - [11-code-analysis](11-code-analysis.md) — what the static checkers verify before tests run.
-- [15-rules → Testing](15-rules.md#testing) — normative rules.
+- [16-guidelines → TestingN-guidelines.md#testing) — normative rules.
 - [Mantis 12691](https://gramps-project.org/bugs/view.php?id=12691) — the canonical namespace-package trap that motivates dotted-path loading.
 - [addons-source PR 930](https://github.com/gramps-project/addons-source/pull/930) — `tests/__init__.py` convention.
 

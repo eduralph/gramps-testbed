@@ -194,6 +194,162 @@ class ObsidianInternalLinkConversion(unittest.TestCase):
 
 
 # ------------------------------------------------------------
+# RelativeMdLinkConversion
+# ------------------------------------------------------------
+class RelativeMdLinkConversion(unittest.TestCase):
+    TITLE_MAP = {
+        "08-testing": [
+            (
+                "Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing",
+                "05 - Addon development/08-testing.md",
+            )
+        ],
+        "12-internationalization": [
+            (
+                "Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Internationalization",
+                "05 - Addon development/12-internationalization.md",
+            )
+        ],
+    }
+
+    def test_bare_md_link(self):
+        out = M.convert_relative_md_links(
+            "See [the Testing page](08-testing.md) for details.", self.TITLE_MAP
+        )
+        self.assertEqual(
+            out,
+            "See [the Testing page]"
+            "(wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing) for details.",
+        )
+
+    def test_md_link_with_anchor(self):
+        out = M.convert_relative_md_links(
+            "See [why init exists](08-testing.md#why-tests__init__py-exists).",
+            self.TITLE_MAP,
+        )
+        self.assertEqual(
+            out,
+            "See [why init exists]"
+            "(wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing"
+            "#why-tests__init__py-exists).",
+        )
+
+    def test_folder_prefixed_md_link(self):
+        out = M.convert_relative_md_links(
+            "See [docs](05 - Addon development/08-testing.md).", self.TITLE_MAP
+        )
+        self.assertIn(
+            "(wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing)", out
+        )
+
+    def test_external_url_md_untouched(self):
+        # External URLs that happen to end in .md must not be rewritten.
+        src = "See [the upstream guide](https://example.com/docs/x.md)."
+        self.assertEqual(M.convert_relative_md_links(src, self.TITLE_MAP), src)
+
+    def test_image_with_md_target_skipped(self):
+        # Negative lookbehind: ![alt](img.md) is an image, leave it alone.
+        src = "![alt](08-testing.md)"
+        self.assertEqual(M.convert_relative_md_links(src, self.TITLE_MAP), src)
+
+    def test_unresolved_md_link_raises(self):
+        with self.assertRaises(ValueError) as cm:
+            M.convert_relative_md_links(
+                "Broken [link](no-such-page.md) here.", self.TITLE_MAP
+            )
+        msg = str(cm.exception)
+        self.assertIn("no-such-page", msg)
+        self.assertIn("title map", msg)
+
+    def test_ambiguous_md_link_raises(self):
+        tm = {
+            "shared": [
+                ("From_A", "a/shared.md"),
+                ("From_B", "b/shared.md"),
+            ],
+        }
+        with self.assertRaises(ValueError) as cm:
+            M.convert_relative_md_links("See [link](shared.md).", tm)
+        msg = str(cm.exception)
+        self.assertIn("ambiguous", msg)
+        self.assertIn("a/shared.md", msg)
+        self.assertIn("b/shared.md", msg)
+
+    def test_multiple_md_links_in_one_line(self):
+        src = "See [a](08-testing.md) then [b](12-internationalization.md)."
+        out = M.convert_relative_md_links(src, self.TITLE_MAP)
+        self.assertEqual(out.count("(wiki:"), 2)
+        self.assertNotIn(".md", out)
+
+    def test_no_md_links_unchanged(self):
+        src = "Plain paragraph with [a normal link](http://x)."
+        self.assertEqual(M.convert_relative_md_links(src, self.TITLE_MAP), src)
+
+
+# ------------------------------------------------------------
+# PrefixInbatchWikiLinks
+# ------------------------------------------------------------
+class PrefixInbatchWikiLinks(unittest.TestCase):
+    INBATCH = {
+        "Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing",
+        "Gramps 6.0 Wiki Manual - Addon Development - Internationalization",
+    }
+    PREFIX = "User:Eduralph/Sandbox/"
+
+    def test_inbatch_target_prefixed(self):
+        src = "See [tests](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing)."
+        out = M.prefix_inbatch_wiki_links(src, self.INBATCH, self.PREFIX)
+        self.assertEqual(
+            out,
+            "See [tests](wiki:User:Eduralph/Sandbox/"
+            "Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing).",
+        )
+
+    def test_outbatch_target_untouched(self):
+        # Out-of-batch wiki: links must stay pointed at the genuine community
+        # page, not become a broken sandbox link.
+        src = "See [coding](wiki:Coding_for_translation)."
+        out = M.prefix_inbatch_wiki_links(src, self.INBATCH, self.PREFIX)
+        self.assertEqual(out, src)
+
+    def test_anchor_preserved_through_prefix(self):
+        src = (
+            "See [a section](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing"
+            "#fixtures)."
+        )
+        out = M.prefix_inbatch_wiki_links(src, self.INBATCH, self.PREFIX)
+        self.assertIn(
+            "wiki:User:Eduralph/Sandbox/"
+            "Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing#fixtures",
+            out,
+        )
+
+    def test_space_form_matches_underscore_form(self):
+        # Inbatch may carry the space form (frontmatter title) while the
+        # link target uses underscores -- MediaWiki treats them equivalently.
+        inbatch = {"Gramps 6.0 Wiki Manual - Addon Development - Testing"}
+        src = "See [t](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing)."
+        out = M.prefix_inbatch_wiki_links(src, inbatch, self.PREFIX)
+        self.assertIn("wiki:User:Eduralph/Sandbox/", out)
+
+    def test_empty_prefix_or_empty_inbatch_noop(self):
+        src = "See [x](wiki:Foo)."
+        self.assertEqual(M.prefix_inbatch_wiki_links(src, set(), self.PREFIX), src)
+        self.assertEqual(M.prefix_inbatch_wiki_links(src, {"Foo"}, ""), src)
+
+    def test_multiple_links_mixed_in_and_out_of_batch(self):
+        src = (
+            "[a](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Testing) "
+            "and [b](wiki:Coding_for_translation) "
+            "and [c](wiki:Gramps_6.0_Wiki_Manual_-_Addon_Development_-_Internationalization)."
+        )
+        out = M.prefix_inbatch_wiki_links(src, self.INBATCH, self.PREFIX)
+        # In-batch ones (a, c) prefixed; out-of-batch (b) untouched.
+        self.assertEqual(out.count("wiki:User:Eduralph/Sandbox/"), 2)
+        self.assertIn("wiki:Coding_for_translation", out)
+
+
+# ------------------------------------------------------------
 # ImagePathAbsolutising
 # ------------------------------------------------------------
 class ImagePathAbsolutising(unittest.TestCase):

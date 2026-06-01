@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - Tutorials"
+title: Gramps 6.0 Wiki Manual - Addon Development - Tutorials
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -44,8 +44,8 @@ For the conceptual map, see [01-overview](01-overview.md). For the full inventor
 
 The implementation modules below show the smallest code that demonstrates each kind. Two things are deliberately omitted to keep the lesson in focus, and both are **required** for shipped addons:
 
-- A **GPL-2.0-or-later license header** at the top of every `.py` file. Copy the header from any existing addon, or see [15-rules → Coding style](15-rules.md#coding-style).
-- **Type hints** on public functions and methods (Python 3.10+ syntax — `X | None`, `list[X]`). The tutorials skip them for readability; production addons should include them per [15-rules → Coding style](15-rules.md#coding-style).
+- A **GPL-2.0-or-later license header** at the top of every `.py` file. Copy the header from any existing addon, or see [16-guidelines → Coding styleN-guidelines.md#coding-style).
+- **Type hints** on public functions and methods (Python 3.10+ syntax — `X | None`, `list[X]`). The tutorials skip them for readability; production addons should include them per [16-guidelines → Coding styleN-guidelines.md#coding-style).
 
 Both are CI-checked on gramps core PRs (Black formats around the license header; `mypy` verifies the type hints); addons-source doesn't gate on them today but the rules apply to addon code regardless.
 

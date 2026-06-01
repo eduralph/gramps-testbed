@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - What's New"
+title: Gramps 6.0 Wiki Manual - Addon Development - What's New
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--wiki:{{man index|6.0}}-->
@@ -21,7 +21,7 @@ This page is the **addon-author slice** of the change log. It's not the full rel
 - per-addon translation / locale plumbing,
 - the addon discovery and loading mechanism.
 
-For the practical *how to port* guidance — what to check on a cross-version port, when to maintain parallel branches — see [13-compatibility](13-compatibility.md). This page is the inventory; 13-compatibility is the procedure.
+For the practical *how to port* guidance — what to check on a cross-version port, when to maintain parallel branches — see [13-compatibilityL-compatibility.md). This page is the inventory; 13-compatibility is the procedure.
 
 ## Gramps 6.1
 
@@ -34,13 +34,13 @@ Targeted from `maintenance/gramps61`; `master` until the 6.1.0 release.
 ### Changed
 
 - **Windows toolchain migrated from MINGW64 to MSYS2 UCRT64.** Gramps' Windows build moved in PR [#2198](https://github.com/gramps-project/gramps/pull/2198) (merged 2026-04-19). MINGW64's Python target triple is rejected by orjson's `maturin` backend; the migration was forced.
-  - **Impact on addon authors:** Windows addon testing targets `maintenance/gramps61` and `master` only — Windows on 6.0 is not upstream-tested. See [13-compatibility → Windows toolchain migrated to UCRT64](13-compatibility.md#windows-toolchain-migrated-to-ucrt64).
-- **GExiv2 version handling rewritten.** addons-source PR [829](https://github.com/gramps-project/addons-source/pull/829) rewrote how GExiv2's version is read and pinned. An addon's `requires_gi=[("GExiv2", "0.10")]` declaration may need adjustment; read the EditExifMetadata addon's GExiv2 code on the target branch before assuming a 6.0 pin transfers. See [13-compatibility → GExiv2 version handling rewritten](13-compatibility.md#gexiv2-version-handling-rewritten).
+  - **Impact on addon authors:** Windows addon testing targets `maintenance/gramps61` and `master` only — Windows on 6.0 is not upstream-tested. See [13-compatibility → Windows toolchain migrated to UCRT64L-compatibility.md#windows-toolchain-migrated-to-ucrt64).
+- **GExiv2 version handling rewritten.** addons-source PR [829](https://github.com/gramps-project/addons-source/pull/829) rewrote how GExiv2's version is read and pinned. An addon's `requires_gi=[("GExiv2", "0.10")]` declaration may need adjustment; read the EditExifMetadata addon's GExiv2 code on the target branch before assuming a 6.0 pin transfers. See [13-compatibility → GExiv2 version handling rewrittenL-compatibility.md#gexiv2-version-handling-rewritten).
 - **BSDDB-on-Windows test skip.** A skip rule for BSDDB on Windows landed on `maintenance/gramps61`. Addons exercising the BSDDB backend in tests need to account for its absence on Windows 6.1 (use `@unittest.skipUnless(...)`; see [08-testing → Skip cleanly](08-testing.md#skip-cleanly)).
 
 ### Deprecated
 
-*None tracked here yet.* The authoritative reference for runtime deprecations is the source — search `gramps/gen/**/*.py` on the target branch for `DeprecationWarning`. See [13-compatibility → Reading the deprecation signal](13-compatibility.md#reading-the-deprecation-signal) for the recipe.
+*None tracked here yet.* The authoritative reference for runtime deprecations is the source — search `gramps/gen/**/*.py` on the target branch for `DeprecationWarning`. See [13-compatibility → Reading the deprecation signalL-compatibility.md#reading-the-deprecation-signal) for the recipe.
 
 ### Removed
 
@@ -48,7 +48,7 @@ Targeted from `maintenance/gramps61`; `master` until the 6.1.0 release.
 
 ## Gramps 6.0
 
-The manual's baseline target. Addons declaring `gramps_target_version="6.0"` run on 6.0.x and are not loaded by 6.1 or later (and vice versa); see [13-compatibility → `gramps_target_version` semantics](13-compatibility.md#gramps_target_version-semantics).
+The manual's baseline target. Addons declaring `gramps_target_version="6.0"` run on 6.0.x and are not loaded by 6.1 or later (and vice versa); see [13-compatibility → `gramps_target_version` semanticsL-compatibility.md#gramps_target_version-semantics).
 
 ### Added
 
@@ -56,7 +56,7 @@ The manual's baseline target. Addons declaring `gramps_target_version="6.0"` run
 
 ### Changed
 
-- **Python 3.10+ minimum.** Older Pythons no longer run Gramps 6.0, which means addons can use modern type-hint syntax — `X | None` instead of `Optional[X]`, `list[X]` instead of `typing.List[X]` — without a compatibility shim. See [15-rules → Coding style](15-rules.md#coding-style).
+- **Python 3.10+ minimum.** Older Pythons no longer run Gramps 6.0, which means addons can use modern type-hint syntax — `X | None` instead of `Optional[X]`, `list[X]` instead of `typing.List[X]` — without a compatibility shim. See [16-guidelines → Coding styleN-guidelines.md#coding-style).
 
 ### Deprecated
 
@@ -80,7 +80,7 @@ Practical guidance: addons still targeting 5.x should pin `gramps_target_version
 
 ## See also
 
-- [13-compatibility](13-compatibility.md) — porting an addon across these releases; the practical companion to this inventory.
+- [13-compatibilityL-compatibility.md) — porting an addon across these releases; the practical companion to this inventory.
 - [07-api-reference](07-api-reference.md) — the current `gramps.gen.*` surface.
 - [Portal:Using Gramps → Release notes](https://www.gramps-project.org/wiki/index.php/Portal:Using_Gramps#Release_notes) — upstream release notes (full, not addon-filtered).
 - [`gramps/NEWS`](https://github.com/gramps-project/gramps/blob/maintenance/gramps61/NEWS) — the in-tree change log on the target branch.

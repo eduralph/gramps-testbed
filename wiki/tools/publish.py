@@ -100,8 +100,26 @@ def decide(
 # ---- sidecar state ----------------------------------------------------------
 
 
-def sidecar_path(state_dir: str, docs_root: str, source: str) -> str:
+def _prefix_slug(title_prefix: str) -> str:
+    """Slugify a ``--title-prefix`` for use as a sidecar-directory segment.
+    Empty prefix -> empty slug (default flat layout). Non-empty -> a leading
+    underscore + ascii-safe slug so canonical pushes and prefixed pushes
+    don't share sidecars (which would make a fresh sandbox publish look
+    like 'we published this before to the canonical page').
+    """
+    if not title_prefix:
+        return ""
+    safe = re.sub(r"[^A-Za-z0-9._-]+", "_", title_prefix.strip("/")).strip("_")
+    return f"_prefix-{safe}" if safe else ""
+
+
+def sidecar_path(
+    state_dir: str, docs_root: str, source: str, title_prefix: str = ""
+) -> str:
     rel = os.path.relpath(source, docs_root)
+    slug = _prefix_slug(title_prefix)
+    if slug:
+        return os.path.join(state_dir, slug, rel + ".json")
     return os.path.join(state_dir, rel + ".json")
 
 
@@ -171,7 +189,13 @@ def _git_short_sha() -> str | None:
 
 
 def build_plan(
-    transport, docs_root: str, state_dir: str, filt: str | None
+    transport,
+    docs_root: str,
+    state_dir: str,
+    filt: str | None,
+    *,
+    title_prefix: str = "",
+    strip_categories: bool = False,
 ) -> list[PlanItem]:
     plan: list[PlanItem] = []
     # Build the title map ONCE across the whole docs tree -- a page in any
@@ -179,12 +203,16 @@ def build_plan(
     # defaults to scanning the source file's parent, which is too narrow
     # for cross-folder references.
     title_map = mdcommon.build_title_map(Path(docs_root))
-    for src in discover(docs_root, filt):
-        # Cheap front-matter peek: we only want to RUN md2wiki on pages we
-        # intend to publish. Unmanaged drafts may contain content that
-        # md2wiki rejects (rare but real -- e.g. a scraped page with
-        # [[...]]-looking content in an indented code block); failing the
-        # whole plan because of an unrelated draft is unhelpful.
+
+    # Two-pass over the discovered sources: pass 1 collects the canonical
+    # titles of the pages that are actually in this publish batch (managed
+    # AND matched by --filter), so pass 2 can pass that set to md2wiki for
+    # the in-batch wiki:-link prefix rewriting. Without this, the converter
+    # can't tell "in-batch (rewrite)" from "out-of-batch (leave alone)".
+    sources = discover(docs_root, filt)
+    inbatch_titles: set[str] = set()
+    src_meta: list[tuple[str, dict]] = []
+    for src in sources:
         try:
             with open(src, encoding="utf-8") as f:
                 head_text = f.read()
@@ -194,13 +222,29 @@ def build_plan(
             meta, _ = md2wiki.split_frontmatter(head_text)
         except ValueError:
             continue
+        src_meta.append((src, meta))
+        if meta.get("managed", False) and meta.get("title"):
+            inbatch_titles.add(str(meta["title"]))
+
+    for src, meta in src_meta:
+        # Cheap front-matter peek: we only want to RUN md2wiki on pages we
+        # intend to publish. Unmanaged drafts may contain content that
+        # md2wiki rejects (rare but real -- e.g. a scraped page with
+        # [[...]]-looking content in an indented code block); failing the
+        # whole plan because of an unrelated draft is unhelpful.
         if not meta.get("managed", False):
             continue
-        page = md2wiki.convert_file(src, title_map=title_map)
+        page = md2wiki.convert_file(
+            src,
+            title_map=title_map,
+            title_prefix=title_prefix,
+            inbatch_canonical_titles=inbatch_titles,
+            strip_categories=strip_categories,
+        )
         if not page.managed:
             continue
         ghash = sha256(page.wikitext)
-        sc = load_sidecar(sidecar_path(state_dir, docs_root, src))
+        sc = load_sidecar(sidecar_path(state_dir, docs_root, src, title_prefix))
         if transport is not None:
             live = transport.get_page(page.title)
             action, reason = decide(
@@ -283,6 +327,8 @@ def apply_plan(
     docs_root: str,
     force: bool,
     bot: bool,
+    *,
+    title_prefix: str = "",
 ) -> int:
     summary = provenance_summary()
     failures = 0
@@ -329,7 +375,7 @@ def apply_plan(
             continue
         new_revid = edit.get("newrevid") or edit.get("oldrevid")
         save_sidecar(
-            sidecar_path(state_dir, docs_root, p.source),
+            sidecar_path(state_dir, docs_root, p.source, title_prefix),
             {
                 "title": p.title,
                 "source": os.path.relpath(p.source, docs_root),
@@ -357,7 +403,31 @@ def main() -> None:
     ap.add_argument(
         "--no-login", action="store_true", help="skip interactive login pause"
     )
+    ap.add_argument(
+        "--title-prefix",
+        default="",
+        help=(
+            'prepend to every published title and to in-batch wiki: link '
+            'targets, e.g. "User:Eduralph/Sandbox/". Sidecars are kept '
+            "under a separate subdirectory per prefix so canonical and "
+            "sandbox publishes don't share state."
+        ),
+    )
+    ap.add_argument(
+        "--keep-categories",
+        action="store_true",
+        help=(
+            "keep [[Category:X]] trailers even when --title-prefix starts "
+            "with 'User:' (default: auto-strip for User-namespace pushes so "
+            "the sandbox page doesn't show up in public category indexes)"
+        ),
+    )
     args = ap.parse_args()
+
+    # Auto-strip categories for User-namespace prefixes unless overridden.
+    strip_categories = (
+        args.title_prefix.startswith("User:") and not args.keep_categories
+    )
 
     if not os.path.isdir(args.docs_root):
         sys.exit(f"docs-root not found: {args.docs_root}")
@@ -377,7 +447,14 @@ def main() -> None:
         print(f"Authenticated as {who.get('name')} (id {who.get('id')})\n")
 
     try:
-        plan = build_plan(transport, args.docs_root, args.state_dir, args.filt)
+        plan = build_plan(
+            transport,
+            args.docs_root,
+            args.state_dir,
+            args.filt,
+            title_prefix=args.title_prefix,
+            strip_categories=strip_categories,
+        )
         if not plan:
             print("No managed pages found.")
             return
@@ -393,6 +470,7 @@ def main() -> None:
             args.docs_root,
             force=args.force,
             bot=not args.no_bot,
+            title_prefix=args.title_prefix,
         )
         if failures:
             sys.exit(f"\n{failures} page(s) failed.")

@@ -15,7 +15,9 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-import yaml
+# yaml is imported lazily inside build_title_map -- it's the only function in
+# this module that needs it, and keeping it lazy lets the pure-function tests
+# (link conversion, code stash, etc.) run in environments without pyyaml.
 
 # ------------------------
 # Obsidian source-side patterns
@@ -31,6 +33,20 @@ OBSIDIAN_INTERNAL_LINK_RE = re.compile(r"(?<!!)\[\[([^\[\]|]+?)(?:\|([^\]]*))?\]
 # Standard markdown image: ![alt](src). Used by md2pdf for path absolutising
 # and SVG pre-conversion AFTER Obsidian embeds have been normalised.
 MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
+
+# Standard markdown link with a relative .md target: [label](path/to/file.md)
+# or [label](file.md#anchor). The href must end with .md or .md#... .
+# Negative lookbehind on `!` keeps this from matching ![alt](img.md)-shaped
+# images. The path part allows everything except `)` and `#` (so folder
+# names with spaces like "05 - Addon development/foo.md" work). External
+# URLs are filtered inside the substitution by checking for "://".
+RELATIVE_MD_LINK_RE = re.compile(
+    r"(?<!!)\[([^\]]+)\]\(([^)#]+\.md)(#[^)]*)?\)"
+)
+
+# A [label](wiki:Target) link, post-conversion of all sources. Used by the
+# in-batch prefix rewriter to apply a sandbox prefix to in-batch targets only.
+WIKI_LINK_RE = re.compile(r"\[([^\]]+)\]\(wiki:([^)]+)\)")
 
 # ------------------------
 # MediaWiki-side patterns (post-pandoc)
@@ -238,6 +254,103 @@ def convert_obsidian_internal_links(
     return OBSIDIAN_INTERNAL_LINK_RE.sub(repl, body)
 
 
+def convert_relative_md_links(
+    body: str, title_map: dict[str, list[tuple[str, str]]]
+) -> str:
+    """Convert ``[label](XX-name.md[#anchor])`` -> ``[label](wiki:Wiki_Title[#anchor])``.
+
+    Resolves the .md target via the same ``title_map`` shape used by
+    :func:`convert_obsidian_internal_links` (``{stem: [(title, path), ...]}``).
+    Bare-stem and ``folder/stem.md`` forms both work; folder form filters by
+    path suffix to disambiguate collisions.
+
+    External URLs (anything with ``://`` in the href) and images are skipped.
+    An anchor (``#section``) is preserved verbatim on the wiki: target so the
+    wikilink can target a section heading on the resolved page.
+
+    Raises ``ValueError`` for unresolved or ambiguous ``.md`` targets, with
+    the same error shape as :func:`convert_obsidian_internal_links` so authors
+    get consistent diagnostics regardless of which link style they used.
+    """
+
+    def repl(m: re.Match) -> str:
+        label = m.group(1)
+        href = m.group(2)
+        anchor = m.group(3) or ""
+        # Skip external URLs (e.g. https://example.com/x.md). The regex
+        # already excludes ! but not "://", so guard here.
+        if "://" in href:
+            return m.group(0)
+        # Stem is the last path segment without the .md suffix.
+        path_no_ext = href[: -len(".md")]
+        stem = path_no_ext.rsplit("/", 1)[-1]
+        candidates = title_map.get(stem, [])
+        if not candidates:
+            known = sorted(title_map)
+            preview = ", ".join(known[:10]) + (
+                f", ... ({len(known) - 10} more)" if len(known) > 10 else ""
+            )
+            raise ValueError(
+                f"unresolved relative .md link [{label}]({href}{anchor}): "
+                f"no page with stem {stem!r} in title map (known: {preview})"
+            )
+        if "/" in path_no_ext:
+            suffix = path_no_ext + ".md"
+            candidates = [
+                c for c in candidates if c[1].replace("\\", "/").endswith(suffix)
+            ]
+        if not candidates:
+            raise ValueError(
+                f"unresolved relative .md link [{label}]({href}{anchor}): "
+                f"no source path matched folder/stem form {path_no_ext!r}"
+            )
+        if len(candidates) > 1:
+            paths = ", ".join(c[1] for c in candidates)
+            raise ValueError(
+                f"ambiguous relative .md link [{label}]({href}{anchor}): "
+                f"stem {stem!r} matches multiple pages -- disambiguate by using "
+                f"the folder/stem.md form. Candidates: {paths}"
+            )
+        wiki_title = candidates[0][0]
+        return f"[{label}](wiki:{wiki_title}{anchor})"
+
+    return RELATIVE_MD_LINK_RE.sub(repl, body)
+
+
+def prefix_inbatch_wiki_links(
+    body: str, inbatch_titles: set[str], title_prefix: str
+) -> str:
+    """Prepend ``title_prefix`` to any ``[label](wiki:Target)`` whose Target
+    matches an entry in ``inbatch_titles``. Out-of-batch wiki: links are
+    left alone (so external references like ``wiki:Coding_for_translation``
+    keep pointing at the genuine community page).
+
+    ``inbatch_titles`` is compared with both space-form and underscore-form
+    normalisation, since MediaWiki treats ``Foo Bar`` and ``Foo_Bar`` as the
+    same page name and authors may write either.
+    """
+    if not title_prefix or not inbatch_titles:
+        return body
+    # Normalise once: store both underscore and space forms in a set we can
+    # check the raw target against (which is whatever the author wrote).
+    normalised: set[str] = set()
+    for t in inbatch_titles:
+        normalised.add(t)
+        normalised.add(t.replace(" ", "_"))
+        normalised.add(t.replace("_", " "))
+
+    def repl(m: re.Match) -> str:
+        label = m.group(1)
+        target = m.group(2)
+        # Split off any #anchor before comparing.
+        bare, sep, anchor = target.partition("#")
+        if bare not in normalised:
+            return m.group(0)
+        return f"[{label}](wiki:{title_prefix}{bare}{sep}{anchor})"
+
+    return WIKI_LINK_RE.sub(repl, body)
+
+
 def absolutize_image_paths(body: str, source_dir: Path) -> str:
     """Rewrite relative image ``src`` paths in ``![alt](src)`` to absolute
     paths anchored at ``source_dir``.
@@ -280,6 +393,8 @@ def build_title_map(docs_root: Path) -> dict[str, list[tuple[str, str]]]:
     would break tree mode on vaults where colliding stems exist but nobody
     links across the collision.
     """
+    import yaml  # noqa: PLC0415 -- lazy so callers without pyyaml can use rest of module
+
     out: dict[str, list[tuple[str, str]]] = {}
     for p in sorted(docs_root.rglob("*.md")):
         try:

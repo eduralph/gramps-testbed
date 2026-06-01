@@ -1,10 +1,10 @@
 ---
-title: "Gramps 6.0 Wiki Manual - Addon Development - API Reference"
+title: Gramps 6.0 Wiki Manual - Addon Development - API Reference
 categories:
   - Addons
   - Developers
   - Gramps 6.0
-managed: false
+managed: true
 ---
 
 <!--
@@ -56,7 +56,7 @@ The full inventory is large; the cheapest reference is the source under [`gramps
 |-----------------------|---------------------------------------------------------------------------------------------|
 | `gramps.gen.types`    | `PersonHandle`, `FamilyHandle`, …, `PersonGrampsID`, `FamilyGrampsID`, …                    |
 
-Prefer these over bare `str` in addon code that handles either kind of identifier. It documents intent for the next reader and makes mistakes (handle vs ID) catchable with `mypy`. See [15-rules → Coding style](15-rules.md#coding-style).
+Prefer these over bare `str` in addon code that handles either kind of identifier. It documents intent for the next reader and makes mistakes (handle vs ID) catchable with `mypy`. See [16-guidelines → Coding styleN-guidelines.md#coding-style).
 
 ### Errors
 
@@ -208,7 +208,7 @@ If you find yourself reaching into `gramps.gui.*` or `gramps.plugins.*` for some
 - [04-addon-kinds](04-addon-kinds.md) — which kinds use which base classes.
 - [05-fundamentals](05-fundamentals.md) — the cross-cutting concepts (logging, translation, signals) backed by this surface.
 - [06-data-access](06-data-access.md) — patterns over the DB API.
-- [13-compatibility](13-compatibility.md) — what changes across Gramps versions in this surface.
+- [13-compatibilityL-compatibility.md) — what changes across Gramps versions in this surface.
 - [Report API](wiki:Report_API), [Report Generation](wiki:Report_Generation) — standalone wiki references for the docgen subsystem.
 - [Simple Access API](wiki:Simple_Access_API) — the standalone wiki page for `SimpleAccess` / `SimpleDoc`.
 - [Gramps Developer Reference](https://gramps-project.org/docs/) — upstream Sphinx-generated API docs.
