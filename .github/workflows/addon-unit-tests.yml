@@ -131,23 +131,8 @@ jobs:
         # isolation without blocking the rest.
         shell: bash
         run: |
-          addon_mods=$(python3 - <<'PY'
-          import ast, glob, re
-          pat = re.compile(r"requires_mod\s*=\s*(\[[^\]]*\])")
-          mods = set()
-          for f in glob.glob("addons-source/*/*.gpr.py"):
-              try:
-                  text = open(f, encoding="utf-8").read()
-              except OSError:
-                  continue
-              for m in pat.finditer(text):
-                  try:
-                      mods.update(ast.literal_eval(m.group(1)))
-                  except (ValueError, SyntaxError):
-                      pass
-          print(" ".join(sorted(mods)))
-          PY
-          )
+          addon_mods=$(python3 \
+            gramps-testbed/scripts/lib/addon_python_deps.py addons-source)
           if [ -n "$addon_mods" ]; then
             echo "→ addon deps: $addon_mods"
             # Install one at a time so a single failing build
