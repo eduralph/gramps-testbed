@@ -118,16 +118,11 @@ jobs:
           pip install -e 'gramps[testing]'
 
       - name: Compile Gramps translations
-        # Keeps gramps.gen imports quiet during test collection. Matches
-        # the same step in interface-tests.yml.
-        working-directory: gramps
-        run: |
-          for po in po/*.po; do
-            lang=$(basename "$po" .po)
-            dest="build/mo/$lang/LC_MESSAGES"
-            mkdir -p "$dest"
-            msgfmt "$po" -o "$dest/gramps.mo"
-          done
+        # Keeps gramps.gen imports quiet during test collection. Shared with
+        # interface-tests.yml / addon-unit-tests.yml via the composite action.
+        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
+        with:
+          gramps-path: gramps
 
       - name: Run unit tests
         # Mirrors the canonical command from ../gramps/AGENTS.md:

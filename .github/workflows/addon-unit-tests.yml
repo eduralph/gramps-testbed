@@ -153,15 +153,10 @@ jobs:
 
       - name: Compile Gramps translations
         # Same rationale as unit-tests.yml: keeps gramps.gen imports quiet
-        # during test collection.
-        working-directory: gramps
-        run: |
-          for po in po/*.po; do
-            lang=$(basename "$po" .po)
-            dest="build/mo/$lang/LC_MESSAGES"
-            mkdir -p "$dest"
-            msgfmt "$po" -o "$dest/gramps.mo"
-          done
+        # during test collection. Shared via the composite action.
+        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
+        with:
+          gramps-path: gramps
 
       - name: Run addon unit tests
         # Mirrors scripts/ubuntu/run-addon-unit.sh. Each test module is

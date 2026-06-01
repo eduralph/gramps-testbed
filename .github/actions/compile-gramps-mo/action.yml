@@ -1,0 +1,34 @@
+name: Compile Gramps translations
+description: >-
+  Compile the gramps checkout's po/*.po into
+  build/mo/<lang>/LC_MESSAGES/gramps.mo. `pip install -e` skips setup.py's
+  build, so build/mo is empty and gramps.gen prints noisy gettext warnings
+  during test collection; compiling the catalogs directly keeps it quiet.
+
+  Ubuntu callers only (shell: bash). The two Windows addon/unit workflows run
+  this loop under `shell: msys2 {0}` (msgfmt comes from the UCRT64 pacman
+  gettext, which is not on Git Bash's PATH), and a composite action step's
+  shell is a literal that cannot be the caller's msys2 default — so those two
+  keep the loop inline. See results/ci-compile-gramps-mo-action/SUMMARY.md.
+
+inputs:
+  gramps-path:
+    description: >-
+      Path to the gramps checkout, relative to the workspace (the directory
+      that contains po/). Matches the `path:` of the actions/checkout step.
+    required: false
+    default: gramps
+
+runs:
+  using: composite
+  steps:
+    - name: Compile Gramps translations
+      shell: bash
+      working-directory: ${{ inputs.gramps-path }}
+      run: |
+        for po in po/*.po; do
+          lang=$(basename "$po" .po)
+          dest="build/mo/$lang/LC_MESSAGES"
+          mkdir -p "$dest"
+          msgfmt "$po" -o "$dest/gramps.mo"
+        done
