@@ -13,6 +13,7 @@ name: dev-tooling
 
 on:
   push:
+    branches: [main]
   pull_request:
   schedule:
     - cron: "0 5 * * 1"   # weekly, Monday 05:00 UTC — matches the cron cadence of the suite
