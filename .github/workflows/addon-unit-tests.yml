@@ -116,10 +116,7 @@ jobs:
         # See unit-tests.yml for rationale — apt-installed PyGObject is
         # only visible to the system Python, not to setup-python@v5's
         # toolcache interpreter, so we use a system-site-packages venv.
-        run: |
-          python3 -m venv --system-site-packages .venv
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-          .venv/bin/python -m pip install --upgrade pip
+        uses: ./gramps-testbed/.github/actions/setup-gramps-venv
 
       - name: Restore pip cache
         uses: actions/cache@v4
