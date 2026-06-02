@@ -14,12 +14,17 @@ name: Sync Forks from Upstream
 #    divergence outright; a merge commit reconciles cleanly.
 #
 # Requirements: a fine-grained PAT in `secrets.FORK_SYNC_TOKEN` with
-# Contents:write + Pull-requests:write on this repo owner's gramps and
-# addons-source forks (i.e. ${{ github.repository_owner }}/gramps and
-# .../addons-source). The owner is derived from github.repository_owner
-# so the workflow tracks owner renames automatically — but the PAT scope
-# is configured out-of-band in GitHub settings and must be re-pointed at
-# the new owner's forks when the owner changes.
+# Contents:write + Pull-requests:write on the FORK repos.
+#
+# Fork owner is its OWN config knob — do NOT derive it from
+# github.repository_owner. The forks are not necessarily under the testbed's
+# owner: this testbed lives under the `Ralphovi` org, while the forks are
+# personal repos under the `eduralph` user. So the owner comes from
+# `vars.FORK_OWNER` (default `eduralph`). A prior version derived it from
+# github.repository_owner, which pointed the sync at the non-existent
+# `Ralphovi/gramps` after the testbed moved to the org. If the forks are ever
+# moved into the testbed's org, set the FORK_OWNER repo variable to match.
+# The PAT scope is configured out-of-band and must cover FORK_OWNER's repos.
 
 on:
   schedule:
@@ -37,9 +42,9 @@ jobs:
       matrix:
         repo:
           - name: gramps
-            owner: ${{ github.repository_owner }}
+            owner: ${{ vars.FORK_OWNER || 'eduralph' }}
           - name: addons-source
-            owner: ${{ github.repository_owner }}
+            owner: ${{ vars.FORK_OWNER || 'eduralph' }}
         branch:
           - master
           - maintenance/gramps60
@@ -57,7 +62,8 @@ jobs:
           Without it, the sync workflow cannot push to the forks. To fix:
             1. Create a fine-grained PAT at
                  https://github.com/settings/personal-access-tokens/new
-               scoped to this owner's gramps + addons-source forks with
+               scoped to the fork owner's (vars.FORK_OWNER, default
+                 eduralph) gramps + addons-source forks with
                  Contents: read & write
                  Pull requests: read & write
             2. Add it as a repo secret on this testbed:
