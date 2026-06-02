@@ -1,0 +1,105 @@
+diff --git a/.github/workflows/addon-unit-tests.yml b/.github/workflows/addon-unit-tests.yml
+index d92131c..d914482 100644
+--- a/.github/workflows/addon-unit-tests.yml
++++ b/.github/workflows/addon-unit-tests.yml
+@@ -37,6 +37,10 @@ permissions:
+   checks: write
+   pull-requests: write
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   addon-unit-tests:
+     name: '[upstream] Addon Unit Tests'
+diff --git a/.github/workflows/dev-tooling.yml b/.github/workflows/dev-tooling.yml
+index f8adc6e..def2c56 100644
+--- a/.github/workflows/dev-tooling.yml
++++ b/.github/workflows/dev-tooling.yml
+@@ -28,6 +28,10 @@ on:
+ permissions:
+   contents: read
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   shape-and-flow:
+     runs-on: ubuntu-24.04
+diff --git a/.github/workflows/docker-build.yml b/.github/workflows/docker-build.yml
+index e253cb2..38cb558 100644
+--- a/.github/workflows/docker-build.yml
++++ b/.github/workflows/docker-build.yml
+@@ -25,6 +25,10 @@ on:
+     - cron: '0 6 * * *'
+   workflow_dispatch:
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   build-ubuntu:
+     runs-on: ubuntu-24.04
+diff --git a/.github/workflows/interface-tests.yml b/.github/workflows/interface-tests.yml
+index 6412038..feeb4bc 100644
+--- a/.github/workflows/interface-tests.yml
++++ b/.github/workflows/interface-tests.yml
+@@ -37,6 +37,10 @@ permissions:
+   checks: write
+   pull-requests: write
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   interface-tests:
+     name: '[testbed] Interface Tests (${{ matrix.gramps_ref }})'
+diff --git a/.github/workflows/unit-tests.yml b/.github/workflows/unit-tests.yml
+index c3b1658..53ba6c5 100644
+--- a/.github/workflows/unit-tests.yml
++++ b/.github/workflows/unit-tests.yml
+@@ -27,6 +27,10 @@ permissions:
+   checks: write
+   pull-requests: write
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   unit-tests:
+     name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
+diff --git a/.github/workflows/windows-addon-unit-tests.yml b/.github/workflows/windows-addon-unit-tests.yml
+index c8afd43..6a170f3 100644
+--- a/.github/workflows/windows-addon-unit-tests.yml
++++ b/.github/workflows/windows-addon-unit-tests.yml
+@@ -34,6 +34,10 @@ permissions:
+   checks: write
+   pull-requests: write
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   windows-addon-unit-tests:
+     name: '[upstream] Windows Addon Unit Tests'
+diff --git a/.github/workflows/windows-unit-tests.yml b/.github/workflows/windows-unit-tests.yml
+index dee8ca6..852278a 100644
+--- a/.github/workflows/windows-unit-tests.yml
++++ b/.github/workflows/windows-unit-tests.yml
+@@ -27,6 +27,10 @@ permissions:
+   checks: write
+   pull-requests: write
+ 
++concurrency:
++  group: ${{ github.workflow }}-${{ github.ref }}
++  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
++
+ jobs:
+   windows-unit-tests:
+     name: '[upstream] Windows Unit Tests (${{ matrix.gramps_ref }})'

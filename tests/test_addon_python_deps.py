@@ -1,4 +1,4 @@
-"""Unit tests for ``scripts/lib/addon_python_deps.py``.
+"""Unit tests for ``agent-work/scripts/lib/addon_python_deps.py``.
 
 The addon-unit CI jobs (Linux + Windows) install each addon's ``requires_mod``
 Python deps before running its tests. That derivation used to be a regex
@@ -27,9 +27,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-# scripts/lib holds the extractor; make it importable (mirrors
+# agent-work/scripts/lib holds the extractor; make it importable (mirrors
 # tests/test_addon_system_deps.py).
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "lib"))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-work" / "scripts" / "lib"))
 import addon_python_deps as deps  # noqa: E402
 
 

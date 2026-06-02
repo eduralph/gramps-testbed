@@ -1,0 +1,28 @@
+diff --git a/.github/workflows/dev-tooling.yml b/.github/workflows/dev-tooling.yml
+index f8adc6e..47e5ccb 100644
+--- a/.github/workflows/dev-tooling.yml
++++ b/.github/workflows/dev-tooling.yml
+@@ -31,6 +31,9 @@ permissions:
+ jobs:
+   shape-and-flow:
+     runs-on: ubuntu-24.04
++    # Cap a hung analyzer (pyright/semgrep can spin on a pathological input).
++    # The analyzers normally finish in a few minutes; 15 is generous.
++    timeout-minutes: 15
+     # ADVISORY at the JOB level — same pattern as unit-tests.yml / addon-unit-tests.yml.
+     # `continue-on-error` here makes the WORKFLOW conclusion stay green even when the
+     # JOB is red, so findings don't gate merges. The check-run / job conclusion still
+diff --git a/.github/workflows/upstream-sync.yml b/.github/workflows/upstream-sync.yml
+index 798624a..774fb50 100644
+--- a/.github/workflows/upstream-sync.yml
++++ b/.github/workflows/upstream-sync.yml
+@@ -25,6 +25,9 @@ on:
+ jobs:
+   sync:
+     runs-on: ubuntu-24.04
++    # Cap a wedged git clone/fetch/merge/push or a hung gh call. The sync
++    # is a handful of git+gh operations per matrix cell; 15min is ample.
++    timeout-minutes: 15
+     strategy:
+       fail-fast: false
+       matrix:

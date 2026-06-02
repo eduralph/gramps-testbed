@@ -1,0 +1,18 @@
+diff --git a/.github/workflows/windows-unit-tests.yml b/.github/workflows/windows-unit-tests.yml
+index dee8ca6..2f9d2bc 100644
+--- a/.github/workflows/windows-unit-tests.yml
++++ b/.github/workflows/windows-unit-tests.yml
+@@ -44,9 +44,10 @@ jobs:
+       matrix:
+         # Windows uses UCRT64 (per #2198); UCRT64 + the BSDDB-on-Windows
+         # skip (#2202) only landed on maintenance/gramps61 and master, so
+-        # this matrix diverges from unit-tests.yml (Linux still tests
+-        # gramps60). When Windows-eligible gramps minors expand, add
+-        # them here.
++        # gramps60 is not Windows-eligible and is omitted here. (Linux
++        # unit-tests.yml is gramps61-only too now; an earlier version of
++        # this note claiming "Linux still tests gramps60" was stale.)
++        # When Windows-eligible gramps minors expand, add them here.
+         gramps_ref:
+           - maintenance/gramps61
+           - master

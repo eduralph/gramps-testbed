@@ -1,0 +1,37 @@
+diff --git a/CLAUDE.md b/CLAUDE.md
+index acad5b8..0b3ea7e 100644
+--- a/CLAUDE.md
++++ b/CLAUDE.md
+@@ -147,15 +147,23 @@ state instead of rewriting the fix:
+ This is distinct from the merged-history check: a PR existing means *assess that
+ PR*, not *re-solve the bug*.
+ 
+-- **Branch targeting.** Bug fixes *and* code-cleanup PRs are based on
+-  the current production branch — the latest `maintenance/gramps*`
+-  (today `maintenance/gramps61`), not `master`. Per jralls on
+-  gramps-project/gramps#2298:
+-  `master` is for new features and doesn't reach users until the next
+-  major release, so anything users should get sooner — fixes and
+-  cleanups alike — goes on the maintenance branch and is forward-merged
+-  from there. Only genuinely new-feature work targets `master`. An addon
+-  change must sit on the branch matching the Gramps version it targets.
++- **Branch targeting.** The target branch differs by repo — do **not**
++  apply the core rule to addons:
++  - **Core (`gramps`)** — bug fixes *and* code-cleanup PRs are based on
++    the current production branch, the latest `maintenance/gramps*`
++    (today `maintenance/gramps61`), not `master`. Per jralls on
++    gramps-project/gramps#2298: `master` is for new features and doesn't
++    reach users until the next major release, so anything users should
++    get sooner — fixes and cleanups alike — goes on the maintenance
++    branch and is forward-merged from there. Only genuinely new-feature
++    work targets `master`.
++  - **Addons (`addons-source`)** — changes target `maintenance/gramps60`;
++    the maintainer cherry-picks forward to `gramps61`. (Gary Griffin on
++    addons-source PR 915, 2026-05-24.) This is the same branch the
++    Pre-flight check above reads (`git log upstream/maintenance/gramps60
++    -- <Addon>/`); the two must stay in agreement, and the addon-unit CI
++    jobs default `addons_ref` to `maintenance/gramps60` for the same
++    reason.
+ - **Reviewer instruction beats default targeting.** When a maintainer
+   on a specific PR has explicitly asked for a particular base branch,
+   honour that — the targeting default above is the rule, an explicit

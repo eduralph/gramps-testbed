@@ -1,0 +1,68 @@
+# Pre-commit config for the eduralph/gramps fork.
+#
+# Lives in gramps-testbed/agent-work/dev-tooling/pre-commit/ so the gramps fork's
+# tracked branches stay clean -- nothing to strip before opening upstream
+# PRs. Install via agent-work/dev-tooling/pre-commit/install.sh which runs:
+#
+#     pre-commit install -c <this-file>
+#
+# inside ../gramps/, writing a hook to .git/hooks/pre-commit that calls
+# back into pre-commit using this config.
+#
+# Hooks chosen to match what gramps CI gates on (`.github/workflows/`):
+#   * black --check (CI: psf/black@stable --check --diff)
+#   * mypy (CI: "Run mypy static type checker" job)
+#   * py_compile (cheap SyntaxError catch -- not in CI but no reason not)
+#
+# Tests are NOT run here -- they require gramps' GTK/PyGObject deps and
+# go via agent-work/scripts/ubuntu/run-unit.sh in the testbed. Use that as a manual
+# pre-push step (see agent-work/dev-tooling/pre-commit/README.md).
+
+default_install_hook_types: [pre-commit]
+default_stages: [pre-commit]
+
+repos:
+  - repo: https://github.com/psf/black-pre-commit-mirror
+    rev: 26.5.0
+    hooks:
+      - id: black
+        # Match the CI invocation -- check only, never reformat in-place
+        # (CI fails on the diff; in-place rewrites would silently change
+        # diffs the developer hasn't reviewed).
+        args: ["--check", "--diff"]
+        files: \.py$
+        # .gpr.py files are plugin-registration; gramps CI's mypy
+        # excludes them, black isn't run on them in CI either.
+        exclude: \.gpr\.py$
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        # mypy is run with the project's mypy.ini / pyproject.toml --
+        # let it auto-discover. Passing files: '' makes mypy operate on
+        # the project root the same way `mypy` (no-arg) does in CI.
+        args: []
+        # The mypy hook by default passes filenames; force it to run
+        # on the whole package by setting pass_filenames: false so
+        # mypy uses its own config-driven file selection.
+        pass_filenames: false
+        # Bundle the type stubs gramps' CI installs alongside mypy.
+        additional_dependencies:
+          - types-requests
+          - types-Pillow
+        # Limit to gramps fork only -- this hook is invoked from inside
+        # ../gramps/, so cwd-relative paths work.
+        files: ^gramps/.*\.py$
+        exclude: \.gpr\.py$
+
+  - repo: local
+    hooks:
+      - id: py-syntax
+        name: ast.parse (catch SyntaxError before commit)
+        language: system
+        # `py_compile` writes .pyc files into __pycache__/, which often
+        # has Docker-created entries we can't write to from the host.
+        # ast.parse does the same SyntaxError check without writing.
+        entry: python3 -c "import ast,sys;[ast.parse(open(p).read(),p) for p in sys.argv[1:]]"
+        files: \.py$

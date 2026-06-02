@@ -3,7 +3,7 @@
 Written as a ``unittest.TestCase`` subclass so tests can be proposed upstream
 (gramps-project/gramps) without a framework rewrite.
 
-Environment prerequisites (handled by CI / scripts/ubuntu/run-interface.sh):
+Environment prerequisites (handled by CI / agent-work/scripts/ubuntu/run-interface.sh):
   * Xvfb running on $DISPLAY
   * A D-Bus session bus (dbus-run-session)
   * at-spi-bus-launcher active

@@ -215,7 +215,7 @@ jobs:
           done
 
       - name: Run unit tests
-        # Mirrors scripts/windows/run-unit.sh. cygpath -w converts the
+        # Mirrors agent-work/scripts/windows/run-unit.sh. cygpath -w converts the
         # POSIX results path back to a Windows path so the MSYS2-native
         # Python interpreter writes to the location the next step (and
         # actions/upload-artifact) can find. `source .venv/bin/activate`

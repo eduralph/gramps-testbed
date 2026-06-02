@@ -135,7 +135,7 @@ jobs:
 
           $CONFLICTS
 
-          Resolve manually (see scripts/sync-fork-manual.md or the previous
+          Resolve manually (see agent-work/scripts/sync-fork-manual.md or the previous
           manual sync PRs for the pattern).
           EOF
             exit 1

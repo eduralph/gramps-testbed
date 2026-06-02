@@ -1,0 +1,116 @@
+diff --git a/.github/actions/compile-gramps-mo/action.yml b/.github/actions/compile-gramps-mo/action.yml
+new file mode 100644
+index 0000000..4e63126
+--- /dev/null
++++ b/.github/actions/compile-gramps-mo/action.yml
+@@ -0,0 +1,34 @@
++name: Compile Gramps translations
++description: >-
++  Compile the gramps checkout's po/*.po into
++  build/mo/<lang>/LC_MESSAGES/gramps.mo. `pip install -e` skips setup.py's
++  build, so build/mo is empty and gramps.gen prints noisy gettext warnings
++  during test collection; compiling the catalogs directly keeps it quiet.
++
++  Ubuntu callers only (shell: bash). The two Windows addon/unit workflows run
++  this loop under `shell: msys2 {0}` (msgfmt comes from the UCRT64 pacman
++  gettext, which is not on Git Bash's PATH), and a composite action step's
++  shell is a literal that cannot be the caller's msys2 default — so those two
++  keep the loop inline. See results/ci-compile-gramps-mo-action/SUMMARY.md.
++
++inputs:
++  gramps-path:
++    description: >-
++      Path to the gramps checkout, relative to the workspace (the directory
++      that contains po/). Matches the `path:` of the actions/checkout step.
++    required: false
++    default: gramps
++
++runs:
++  using: composite
++  steps:
++    - name: Compile Gramps translations
++      shell: bash
++      working-directory: ${{ inputs.gramps-path }}
++      run: |
++        for po in po/*.po; do
++          lang=$(basename "$po" .po)
++          dest="build/mo/$lang/LC_MESSAGES"
++          mkdir -p "$dest"
++          msgfmt "$po" -o "$dest/gramps.mo"
++        done
+diff --git a/.github/workflows/addon-unit-tests.yml b/.github/workflows/addon-unit-tests.yml
+index d92131c..a496b26 100644
+--- a/.github/workflows/addon-unit-tests.yml
++++ b/.github/workflows/addon-unit-tests.yml
+@@ -164,15 +164,10 @@ jobs:
+ 
+       - name: Compile Gramps translations
+         # Same rationale as unit-tests.yml: keeps gramps.gen imports quiet
+-        # during test collection.
+-        working-directory: gramps
+-        run: |
+-          for po in po/*.po; do
+-            lang=$(basename "$po" .po)
+-            dest="build/mo/$lang/LC_MESSAGES"
+-            mkdir -p "$dest"
+-            msgfmt "$po" -o "$dest/gramps.mo"
+-          done
++        # during test collection. Shared via the composite action.
++        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
++        with:
++          gramps-path: gramps
+ 
+       - name: Run addon unit tests
+         # Mirrors scripts/ubuntu/run-addon-unit.sh. Each test module is
+diff --git a/.github/workflows/interface-tests.yml b/.github/workflows/interface-tests.yml
+index 6412038..d2faa26 100644
+--- a/.github/workflows/interface-tests.yml
++++ b/.github/workflows/interface-tests.yml
+@@ -136,16 +136,11 @@ jobs:
+ 
+       - name: Compile Gramps translations
+         # pip install -e skips setup.py build, so Gramps' build/mo dir is
+-        # empty. Compile .po → .mo directly with msgfmt so launched Gramps
+-        # finds its translations instead of falling back with a warning.
+-        working-directory: gramps
+-        run: |
+-          for po in po/*.po; do
+-            lang=$(basename "$po" .po)
+-            dest="build/mo/$lang/LC_MESSAGES"
+-            mkdir -p "$dest"
+-            msgfmt "$po" -o "$dest/gramps.mo"
+-          done
++        # empty. The composite action compiles .po → .mo directly so launched
++        # Gramps finds its translations instead of falling back with a warning.
++        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
++        with:
++          gramps-path: gramps
+ 
+       # Bulk addon install is intentionally skipped for the smoke suite:
+       # make.py mutates tracked .gpr.py files, and installing all 149 addons
+diff --git a/.github/workflows/unit-tests.yml b/.github/workflows/unit-tests.yml
+index c3b1658..568b9f2 100644
+--- a/.github/workflows/unit-tests.yml
++++ b/.github/workflows/unit-tests.yml
+@@ -114,16 +114,11 @@ jobs:
+           pip install -e 'gramps[testing]'
+ 
+       - name: Compile Gramps translations
+-        # Keeps gramps.gen imports quiet during test collection. Matches
+-        # the same step in interface-tests.yml.
+-        working-directory: gramps
+-        run: |
+-          for po in po/*.po; do
+-            lang=$(basename "$po" .po)
+-            dest="build/mo/$lang/LC_MESSAGES"
+-            mkdir -p "$dest"
+-            msgfmt "$po" -o "$dest/gramps.mo"
+-          done
++        # Keeps gramps.gen imports quiet during test collection. Shared with
++        # interface-tests.yml / addon-unit-tests.yml via the composite action.
++        uses: ./gramps-testbed/.github/actions/compile-gramps-mo
++        with:
++          gramps-path: gramps
+ 
+       - name: Run unit tests
+         # Mirrors the canonical command from ../gramps/AGENTS.md:

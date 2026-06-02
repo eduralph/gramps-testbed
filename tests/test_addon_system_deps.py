@@ -9,7 +9,7 @@ per platform and silently drifted: the Ubuntu image lacked ``graphviz`` while
 Windows had it, and an addon whose import needs a missing typelib does not fail
 loudly — it skips, leaving green CI that tested nothing.
 
-``scripts/lib/addon_system_deps.py`` is now the single source mapping each
+``agent-work/scripts/lib/addon_system_deps.py`` is now the single source mapping each
 declared dependency to its per-platform package. This test guards it two ways:
 
 * **completeness** — every GI namespace / executable any addon declares has a
@@ -34,8 +34,8 @@ import sys
 import unittest
 from pathlib import Path
 
-# scripts/lib holds the single-source map; make it importable.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts" / "lib"))
+# agent-work/scripts/lib holds the single-source map; make it importable.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "agent-work" / "scripts" / "lib"))
 import addon_system_deps as deps  # noqa: E402
 
 
@@ -76,7 +76,7 @@ class AddonSystemDepsCompletenessTest(unittest.TestCase):
             (gi_unmapped, exe_unmapped),
             (set(), set()),
             "Addon(s) declare system deps with no entry in "
-            "scripts/lib/addon_system_deps.py. Add a row mapping each to its "
+            "agent-work/scripts/lib/addon_system_deps.py. Add a row mapping each to its "
             "per-platform package:\n"
             f"  unmapped requires_gi:  {sorted(gi_unmapped)}\n"
             f"  unmapped requires_exe: {sorted(exe_unmapped)}",

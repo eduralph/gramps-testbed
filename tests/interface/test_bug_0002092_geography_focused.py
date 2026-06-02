@@ -48,7 +48,7 @@ class Bug2092GeographyStaleMarkersTest(GrampsInterfaceTestCase):
             from gi.repository import Gdk
             import os
             # ARTIFACTS_DIR is set by both CI (interface-tests.yml) and the
-            # local Docker runner (scripts/ubuntu/run-interface.sh). Falling
+            # local Docker runner (agent-work/scripts/ubuntu/run-interface.sh). Falling
             # back to "artifacts" mirrors base.py:SCREENSHOT_DIR. A previous
             # hard-coded "/workspace/gramps-testbed/artifacts/screenshots"
             # path worked only inside the Docker container and failed in
