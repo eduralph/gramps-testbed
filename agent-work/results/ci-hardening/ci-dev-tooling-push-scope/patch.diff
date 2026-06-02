@@ -1,0 +1,12 @@
+diff --git a/.github/workflows/dev-tooling.yml b/.github/workflows/dev-tooling.yml
+index f8adc6e..776d719 100644
+--- a/.github/workflows/dev-tooling.yml
++++ b/.github/workflows/dev-tooling.yml
+@@ -13,6 +13,7 @@ name: dev-tooling
+ 
+ on:
+   push:
++    branches: [main]
+   pull_request:
+   schedule:
+     - cron: "0 5 * * 1"   # weekly, Monday 05:00 UTC — matches the cron cadence of the suite

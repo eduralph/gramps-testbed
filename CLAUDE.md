@@ -22,32 +22,32 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
 - All tests use stdlib unittest.TestCase (contributable upstream; gramps
   itself uses unittest, so pytest is not introduced anywhere in the testbed)
 - Local pre-commit + post-push verification (set up via
-  `dev-tooling/pre-commit/install.sh`):
+  `agent-work/dev-tooling/pre-commit/install.sh`):
   - Pre-commit hooks differ per repo:
     - gramps fork: black + mypy.
     - addons-source fork: ruff E9/F63/F7/F82 + ast.parse.
     - testbed itself: black (`--check --diff`) + ruff E9/F63/F7/F82 +
-      ast.parse, with `triage/` excluded from all three — it holds
+      ast.parse, with `agent-work/` excluded from all three — it holds
       committed evidence artifacts (one-off repro scripts captured
       as-run), not maintained source.
-    The two fork configs are out-of-tree under `dev-tooling/pre-commit/`
+    The two fork configs are out-of-tree under `agent-work/dev-tooling/pre-commit/`
     (installed via `install.sh`) so fork maintenance branches stay clean
     of dev-tooling commits; the testbed's own config is in-tree at
     `.pre-commit-config.yaml` (standard layout, `pre-commit install`).
-    See `dev-tooling/pre-commit/README.md` for what each hook catches.
+    See `agent-work/dev-tooling/pre-commit/README.md` for what each hook catches.
   - After pushing a fork branch, verify the resulting PR is green:
-    `./scripts/verify-pr.sh <org/repo> <PR#> --watch`. Required because
+    `./agent-work/scripts/verify-pr.sh <org/repo> <PR#> --watch`. Required because
     pre-commit only catches static checks; test failures (e.g. PR 2335
     where a `__new__`-built fixture was missing `dbstate` / `uistate`)
     only surface in CI's actual unit-test run.
 - Local runs, mirrors CI:
   - Ubuntu (containerised, Docker):
-    - ./scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
-    - ./scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
-    - ./scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
+    - ./agent-work/scripts/ubuntu/run-interface.sh — dogtail/AT-SPI GUI tests
+    - ./agent-work/scripts/ubuntu/run-unit.sh — gramps' own *_test.py suite (no GUI)
+    - ./agent-work/scripts/ubuntu/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py (no GUI)
   - Windows (host, MSYS2 UCRT64 shell — no Docker; same toolchain as aio/build.sh):
-    - ./scripts/windows/run-unit.sh — gramps' own *_test.py suite
-    - ./scripts/windows/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py
+    - ./agent-work/scripts/windows/run-unit.sh — gramps' own *_test.py suite
+    - ./agent-work/scripts/windows/run-addon-unit.sh [addon ...] — per-addon tests/test_*.py
     - UCRT64 (vs the older MINGW64) is required because MINGW64's
       Python target triple is rejected by orjson's maturin backend;
       gramps' own AIO build migrated to UCRT64 in PR #2198 on
@@ -56,15 +56,15 @@ If `../addons-source/AGENTS.md` exists, it applies inside that repo:
     - Interface tests (AT-SPI/dogtail) do not port to Windows — Windows
       accessibility is UI Automation, requires a different driver stack
 - Before pushing an addon-source change that touches tests or the addon
-  module itself, run `./scripts/ubuntu/run-addon-unit.sh <AddonName>` on
+  module itself, run `./agent-work/scripts/ubuntu/run-addon-unit.sh <AddonName>` on
   the PR branch. The runner loads each test via its dotted path
   (`<Addon>.tests.<module>`) — the same form upstream's ci.yml uses —
   which is what surfaces Python namespace-package traps that
   `discover`-from-tests/ hides. Bug 0012691 was exactly this class of
   bug: `from <Addon> import <Addon>` bound the submodule instead of the
   class under dotted-path loading.
-- Platform-specific scripts live under ./scripts/<platform>/; today
-  scripts/ubuntu/ and scripts/windows/ exist (Fedora/Arch/macOS
+- Platform-specific scripts live under ./agent-work/scripts/<platform>/; today
+  agent-work/scripts/ubuntu/ and agent-work/scripts/windows/ exist (Fedora/Arch/macOS
   equivalents are planned)
 - Addon test filename convention (mirrors addons-source/.github/workflows/ci.yml):
   - `test_*.py` — general, runs on every platform
@@ -127,7 +127,7 @@ For any item whose verdict is flagged POSSIBLY-FIXED or says "verify upstream
 isn't ahead", the **default first action is the verification, not a fix**. Lead
 with the upstream/PR check (below); only fall through to writing a fix when the
 check confirms the defect is still live on the target branch. A confirmed close
-with an evidenced `mantis-comment.md` is a complete, successful outcome — do not
+with an evidenced `tracker-comment.md` is a complete, successful outcome — do not
 treat it as lesser than a patch.
 
 ### If a PR already exists, VERIFY it — do not duplicate

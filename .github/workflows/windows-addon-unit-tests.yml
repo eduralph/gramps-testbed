@@ -161,7 +161,7 @@ jobs:
         run: |
           source .venv/bin/activate
           addon_mods=$(python \
-            gramps-testbed/scripts/lib/addon_python_deps.py addons-source)
+            gramps-testbed/agent-work/scripts/lib/addon_python_deps.py addons-source)
           if [ -n "$addon_mods" ]; then
             echo "→ addon deps: $addon_mods"
             for mod in $addon_mods; do
@@ -183,7 +183,7 @@ jobs:
           done
 
       - name: Run addon unit tests
-        # Mirrors scripts/windows/run-addon-unit.sh. The filename filter
+        # Mirrors agent-work/scripts/windows/run-addon-unit.sh. The filename filter
         # is inverted from the Linux jobs:
         #   test_*.py              general — runs here
         #   test_linux_*.py        Linux-only — skipped
@@ -267,7 +267,7 @@ jobs:
             # MSYS2-native Python reads Windows paths (same reason the
             # xmlrunner -o above uses it).
             read -r t s < <(python \
-              "$(cygpath -w "$ws_posix/gramps-testbed/scripts/lib/junit_coverage.py")" \
+              "$(cygpath -w "$ws_posix/gramps-testbed/agent-work/scripts/lib/junit_coverage.py")" \
               "$(cygpath -w "$out_dir")")
             if [ "$rc" -ne 0 ]; then
               fail=1

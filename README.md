@@ -22,7 +22,7 @@ workspace/
 └── gramps-testbed/      # this repo
 ```
 
-Run `./scripts/bootstrap-forks.sh` to produce that layout.
+Run `./agent-work/scripts/bootstrap-forks.sh` to produce that layout.
 
 ## Philosophy
 
@@ -63,7 +63,7 @@ the same input → variable → same-owner-default chain
 
 ## Triage pipeline
 
-`triage/` turns the Gramps [MantisBT bug tracker](https://gramps-project.org/bugs)
+`agent-work/` turns the Gramps [MantisBT bug tracker](https://gramps-project.org/bugs)
 into reviewable, fix-ready work items. It exists because the highest-value
 input to the test suite is *the right bug to fix next*, and that decision
 benefits from the tracker's full comment history — which the bulk CSV export
@@ -73,15 +73,15 @@ The cycle, scripted where it's mechanical and manual where it's judgment:
 
 1. **Export** (manual, periodic): a logged-in Mantis CSV export — with the
    `description`, `steps_to_reproduce`, and `additional_information` columns
-   enabled under *My Account → Manage Columns* — lands dated in `triage/data/`.
+   enabled under *My Account → Manage Columns* — lands dated in `agent-work/data/`.
    The export cannot include comment threads; step 2 handles those.
-2. **Scrape notes** (`triage/scripts/mantis_notes.py`): pulls each issue's
+2. **Scrape notes** (`agent-work/scripts/mantis_notes.py`): pulls each issue's
    comment thread by driving a real browser that has already cleared
-   Cloudflare, writing `triage/notes/issue_<id>.json`. (This rides your own
+   Cloudflare, writing `agent-work/notes/issue_<id>.json`. (This rides your own
    browser session; it does not bypass the challenge.)
-3. **Generate briefs** (`triage/scripts/make_handoff.py`): merges the CSV
+3. **Generate briefs** (`agent-work/scripts/make_handoff.py`): merges the CSV
    fields and scraped notes into one Markdown brief per issue under
-   `triage/batches/<batch>/`, each carrying an empty triage verdict and an
+   `agent-work/batches/<batch>/`, each carrying an empty triage verdict and an
    auto-flag pass (external-repo / upstream / core-traceback / already-fixed).
    `run-batch.sh` chains steps 2–3.
 4. **Triage** (manual judgment): each brief's verdict records whether the
@@ -102,15 +102,15 @@ The dependency-light scripts (`mantis_notes.py` needs a browser driver;
 `make_handoff.py` is pure stdlib) and the full per-step workflow — including
 the Cloudflare attach-mode setup, the Claude Code handoff conventions, and
 the per-issue verdict format — are documented in
-[`triage/README.md`](triage/README.md).
+[`agent-work/README.md`](agent-work/README.md).
 
-`triage/data/` and `triage/notes/` are gitignored: they are regenerable
+`agent-work/data/` and `agent-work/notes/` are gitignored: they are regenerable
 exports of third-party tracker content. The verdicts and scripts are tracked,
 since the verdict is the curated judgment the pipeline produces.
 
 ## Static analysis (dev-tooling)
 
-`dev-tooling/` is an authoring-time analyzer stack that catches recurring bug
+`agent-work/dev-tooling/` is an authoring-time analyzer stack that catches recurring bug
 classes from the fault-line analysis *before* they're filed — the same "shrink
 the backlog without re-growing it" intent as the triage pipeline, applied to the
 gramps source. Three tools, layered shape-vs-flow and editor → commit → CI:
@@ -121,7 +121,7 @@ gramps source. Three tools, layered shape-vs-flow and editor → commit → CI:
   on foreign-lifetime objects), pre-commit + CI.
 - **CodeQL** — path-sensitive flow the other two can't reach (init-order, deep
   None-flow). Staged but disabled; added only if the corpus shows that residual
-  recurs. See `dev-tooling/codeql/NOTES_codeql.md`.
+  recurs. See `agent-work/dev-tooling/codeql/NOTES_codeql.md`.
 
 The tools analyze the sibling `../gramps` fork (same cross-repo convention as
 `additionalDirectories`), so the configs travel with the testbed while the forks
@@ -131,7 +131,7 @@ zero false positives is narrowed until it can.
 
 ### Running
 
-Two Claude Code slash commands (install from `dev-tooling/claude-commands/` into
+Two Claude Code slash commands (install from `agent-work/dev-tooling/claude-commands/` into
 `.claude/commands/`), or the underlying scripts directly:
 
 | Command | What it does |
@@ -140,10 +140,10 @@ Two Claude Code slash commands (install from `dev-tooling/claude-commands/` into
 | `/corpus-feedback` | Mines the triage batch results for recurring fix-shapes, ranks them, proposes new analyzer rules. |
 
 The same configs back three enforcement tiers: VS Code tasks (advisory, in-editor
-— see `dev-tooling/vscode/`), pre-commit (blocking, local — `dev-tooling/.pre-commit-config.experiment.yaml`),
+— see `agent-work/dev-tooling/vscode/`), pre-commit (blocking, local — `agent-work/dev-tooling/.pre-commit-config.experiment.yaml`),
 and CI (advisory — `dev-tooling.yml`).
 
-Findings land in `dev-tooling/findings/` (gitignored; regenerable).
+Findings land in `agent-work/dev-tooling/findings/` (gitignored; regenerable).
 
 ### The loop
 
@@ -159,13 +159,13 @@ Defaults resolve to same-owner forks, so most users only need to fork
 the three repos under the same GitHub account and run the bootstrap.
 For forks that live under a different owner, override as follows.
 
-**Locally (`scripts/bootstrap-forks.sh`):**
+**Locally (`agent-work/scripts/bootstrap-forks.sh`):**
 
 ```bash
-FORK_OWNER=alice ./scripts/bootstrap-forks.sh           # alice/gramps, alice/addons-source
-GRAMPS_FORK_URL=https://gitlab.com/… ./scripts/…        # full URL override
-BRANCH=feature/xyz ./scripts/bootstrap-forks.sh         # non-default branch
-./scripts/bootstrap-forks.sh --ssh                      # SSH remotes
+FORK_OWNER=alice ./agent-work/scripts/bootstrap-forks.sh           # alice/gramps, alice/addons-source
+GRAMPS_FORK_URL=https://gitlab.com/… ./agent-work/scripts/…        # full URL override
+BRANCH=feature/xyz ./agent-work/scripts/bootstrap-forks.sh         # non-default branch
+./agent-work/scripts/bootstrap-forks.sh --ssh                      # SSH remotes
 ```
 
 **CI (`.github/workflows/interface-tests.yml`, `unit-tests.yml`, `addon-unit-tests.yml`):**
@@ -185,19 +185,19 @@ Set persistent values under *Settings → Secrets and variables → Actions
 
 ## Running locally
 
-Per-platform scripts live under `scripts/<platform>/`. Today that's
-`scripts/ubuntu/` (Docker on Linux). Fedora, Arch, macOS, and Windows
+Per-platform scripts live under `agent-work/scripts/<platform>/`. Today that's
+`agent-work/scripts/ubuntu/` (Docker on Linux). Fedora, Arch, macOS, and Windows
 entry points will land alongside as those testbeds are added.
 
 Mirror CI exactly via Docker on an Ubuntu/Linux host:
 
 ```bash
-./scripts/bootstrap-forks.sh          # once, to clone the forks
-./scripts/ubuntu/run-interface.sh     # dogtail/AT-SPI GUI tests (mirrors CI)
-./scripts/ubuntu/run-unit.sh          # gramps' own *_test.py unit suite
-./scripts/ubuntu/run-addon-unit.sh    # per-addon tests/test_*.py (args = addon names, empty = all)
-./scripts/ubuntu/run-manual.sh        # launches Gramps visibly for manual QA
-./scripts/ubuntu/rebuild-image.sh     # force-rebuild after Dockerfile edits
+./agent-work/scripts/bootstrap-forks.sh          # once, to clone the forks
+./agent-work/scripts/ubuntu/run-interface.sh     # dogtail/AT-SPI GUI tests (mirrors CI)
+./agent-work/scripts/ubuntu/run-unit.sh          # gramps' own *_test.py unit suite
+./agent-work/scripts/ubuntu/run-addon-unit.sh    # per-addon tests/test_*.py (args = addon names, empty = all)
+./agent-work/scripts/ubuntu/run-manual.sh        # launches Gramps visibly for manual QA
+./agent-work/scripts/ubuntu/rebuild-image.sh     # force-rebuild after Dockerfile edits
 ```
 
 The container installs gramps in editable mode against your checkout, so
@@ -230,10 +230,10 @@ pipeline's verdicts point fixes at.
   runs `msgfmt` over every addon's translations the same way
   `make.py build` does, catching `.po` regressions before they reach
   users.
-- **Triage pipeline** (`triage/`) selects and prepares tracker bugs for
+- **Triage pipeline** (`agent-work/`) selects and prepares tracker bugs for
   fixing, with each fix expected to return a regression test to one of
   the suites above. See [Triage pipeline](#triage-pipeline).
-- **Static analysis** (`dev-tooling/`) layers pyright (None/Optional flow) and
+- **Static analysis** (`agent-work/dev-tooling/`) layers pyright (None/Optional flow) and
   Semgrep (Gramps shape patterns) against the gramps source, advisory in CI with
   a blocking pre-commit gate. The one shipped Semgrep rule
   (`gramps-connect-without-disconnect`) catches the A2 post-disposal class —
@@ -241,7 +241,7 @@ pipeline's verdicts point fixes at.
   disconnect in cleanup — tuned to zero false positives against a labeled corpus
   of upstream bug IDs. `/analyze` runs the analyzers; `/corpus-feedback` mines the
   fixed-bug corpus for the next rule to write. CodeQL is staged but disabled
-  pending evidence its residual flow class recurs. See `dev-tooling/README.md`.
+  pending evidence its residual flow class recurs. See `agent-work/dev-tooling/README.md`.
 
 See CLAUDE.md "CI gates and branch protection" for which workflows
 block merges (none of the test workflows do; all advisory).

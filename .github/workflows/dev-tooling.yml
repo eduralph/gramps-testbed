@@ -2,7 +2,7 @@ name: dev-tooling
 
 # Shape+flow analyzer gate (pyright + semgrep) — ADVISORY in CI, matching the testbed's
 # "all test workflows advisory; informative red without gating merges" philosophy. The
-# hard zero-FP gate lives in pre-commit (dev-tooling/.pre-commit-config.experiment.yaml),
+# hard zero-FP gate lives in pre-commit (agent-work/dev-tooling/.pre-commit-config.experiment.yaml),
 # which runs locally on your own commits. CodeQL is a separate, disabled job (NOTES_codeql.md):
 # add it only once the in-editor tools are tuned and a residual flow class remains.
 #
@@ -100,17 +100,17 @@ jobs:
       - name: pyright (scoped None-flow)
         id: pyright
         working-directory: gramps-testbed
-        run: pyright --project dev-tooling/pyright/pyrightconfig.experiment.json
+        run: pyright --project agent-work/dev-tooling/pyright/pyrightconfig.experiment.json
 
       - name: semgrep (gramps shape patterns)
         id: semgrep
         working-directory: gramps-testbed
-        run: semgrep --error --config dev-tooling/semgrep/rules/ ../gramps/gramps/gui/
+        run: semgrep --error --config agent-work/dev-tooling/semgrep/rules/ ../gramps/gramps/gui/
 
       # Rule self-test is NOT advisory: a rule that no longer pairs with its labeled
       # fixtures is a tooling regression, not an informative finding about gramps. Fail.
       - name: semgrep rule self-test
-        working-directory: gramps-testbed/dev-tooling/semgrep
+        working-directory: gramps-testbed/agent-work/dev-tooling/semgrep
         run: semgrep --test --config rules/ tests/
 
       - name: Advisory summary
@@ -147,5 +147,5 @@ jobs:
   #     - uses: github/codeql-action/init@v3
   #       with:
   #         languages: python
-  #         # queries: ./dev-tooling/codeql/queries   # custom init-order query
+  #         # queries: ./agent-work/dev-tooling/codeql/queries   # custom init-order query
   #     - uses: github/codeql-action/analyze@v3

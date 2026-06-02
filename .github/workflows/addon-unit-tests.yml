@@ -100,7 +100,7 @@ jobs:
         run: |
           sudo apt-get update
           # Base stack + addon system deps derived from the single-source map
-          # (scripts/lib/addon_system_deps.py) — keeps this list from drifting
+          # (agent-work/scripts/lib/addon_system_deps.py) — keeps this list from drifting
           # from what addons declare. gir1.2-gtk-3.0 is gramps' own base dep.
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip \
@@ -110,7 +110,7 @@ jobs:
             xvfb \
             gettext intltool \
             librsvg2-common \
-            $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
+            $(python3 gramps-testbed/agent-work/scripts/lib/addon_system_deps.py --platform ubuntu)
 
       - name: Set up Python venv (inherits python3-gi from apt)
         # See unit-tests.yml for rationale — apt-installed PyGObject is
@@ -146,7 +146,7 @@ jobs:
         shell: bash
         run: |
           addon_mods=$(python3 \
-            gramps-testbed/scripts/lib/addon_python_deps.py addons-source)
+            gramps-testbed/agent-work/scripts/lib/addon_python_deps.py addons-source)
           if [ -n "$addon_mods" ]; then
             echo "→ addon deps: $addon_mods"
             # Install one at a time so a single failing build
@@ -169,7 +169,7 @@ jobs:
           gramps-path: gramps
 
       - name: Run addon unit tests
-        # Mirrors scripts/ubuntu/run-addon-unit.sh. Each test module is
+        # Mirrors agent-work/scripts/ubuntu/run-addon-unit.sh. Each test module is
         # loaded by its dotted path (<Addon>.tests.<module>) from
         # addons-source/, matching the upstream invocation in
         # addons-source/.github/workflows/ci.yml. Loading via dotted
@@ -247,8 +247,8 @@ jobs:
               # PYTHONPATH gi_bootstrap: pin the GI versions (Pango/PangoCairo/
               #   Gtk) like gramps' GUI launcher, so importing a gramps.gui.*
               #   module loads the GTK 3 stack rather than warning / risking
-              #   GTK 4 (see scripts/lib/gi_bootstrap + run-addon-unit.sh).
-              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
+              #   GTK 4 (see agent-work/scripts/lib/gi_bootstrap + run-addon-unit.sh).
+              PYTHONPATH="$GITHUB_WORKSPACE/gramps-testbed/agent-work/scripts/lib/gi_bootstrap${PYTHONPATH:+:$PYTHONPATH}" \
                 xvfb-run -a --server-args="-screen 0 1920x1080x24" \
                   python -m xmlrunner "${modules[@]}" \
                     -o "$out_dir" \
@@ -256,7 +256,7 @@ jobs:
             ) || rc=$?
             # Coverage accounting from the JUnit XML: a wholly-skipped module
             # still exits 0, which exit-code-only would call PASS. Fail it.
-            read -r t s < <(python "$GITHUB_WORKSPACE/gramps-testbed/scripts/lib/junit_coverage.py" "$out_dir")
+            read -r t s < <(python "$GITHUB_WORKSPACE/gramps-testbed/agent-work/scripts/lib/junit_coverage.py" "$out_dir")
             if [ "$rc" -ne 0 ]; then
               fail=1
             elif [ "${t:-0}" -gt 0 ] && [ "${s:-0}" -eq "${t:-0}" ]; then
@@ -284,7 +284,7 @@ jobs:
 
       - name: Validate addon system dependencies
         # Every requires_gi / requires_exe an addon declares must be mapped in
-        # scripts/lib/addon_system_deps.py (so the apt list above stays in
+        # agent-work/scripts/lib/addon_system_deps.py (so the apt list above stays in
         # sync), and every such dep of a *tested* addon must be present in this
         # environment. Guards against the per-platform drift that previously
         # left graphviz out of the image. GRAMPS_TESTBED enables the presence

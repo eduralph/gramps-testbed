@@ -98,7 +98,7 @@ jobs:
         run: |
           sudo apt-get update
           # Base stack + addon system deps derived from the single-source map
-          # (scripts/lib/addon_system_deps.py); gir1.2-gtk-3.0 is gramps' base.
+          # (agent-work/scripts/lib/addon_system_deps.py); gir1.2-gtk-3.0 is gramps' base.
           sudo apt-get install -y --no-install-recommends \
             python3 python3-venv python3-pip \
             python3-gi python3-gi-cairo python3-cairo python3-pyatspi python3-icu \
@@ -108,7 +108,7 @@ jobs:
             xdotool wmctrl \
             gettext intltool \
             librsvg2-common \
-            $(python3 gramps-testbed/scripts/lib/addon_system_deps.py --platform ubuntu)
+            $(python3 gramps-testbed/agent-work/scripts/lib/addon_system_deps.py --platform ubuntu)
 
       - name: Set up Python venv (inherits python3-gi / python3-pyatspi from apt)
         # Ubuntu 24.04's apt python3-gi and python3-pyatspi install into
@@ -150,7 +150,7 @@ jobs:
       # USER_PLUGINS below — no make.py invocation, no mutation of
       # addons-source. Keep this list as tight as the tests require; every
       # entry adds startup cost. Kept in sync with the equivalent block in
-      # scripts/ubuntu/run-interface.sh.
+      # agent-work/scripts/ubuntu/run-interface.sh.
       - name: Install per-test addons
         run: |
           USER_PLUGINS="$(python -c 'from gramps.gen.const import USER_PLUGINS; print(USER_PLUGINS)')"

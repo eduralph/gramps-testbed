@@ -1,6 +1,6 @@
 ---
 description: Mine the triage batch results for recurring fix shapes and propose new analyzer rules
-allowed-tools: Bash(python3 dev-tooling/claude-commands/extract_corpus.py:*), Read, Grep
+allowed-tools: Bash(python3 agent-work/dev-tooling/claude-commands/extract_corpus.py:*), Read, Grep
 ---
 
 Analyze the fixed-bug corpus and produce feedback for the analyzer ruleset.
@@ -8,11 +8,11 @@ Analyze the fixed-bug corpus and produce feedback for the analyzer ruleset.
 ## Steps
 
 1. Extract structured facts from all batches:
-   `python3 dev-tooling/claude-commands/extract_corpus.py $ARGUMENTS`
-   (No argument = all batches under `triage/batches/`. An argument scopes to one
-   batch dir, e.g. `/corpus-feedback triage/batches/batch-03-confirmed-velocity`.)
+   `python3 agent-work/dev-tooling/claude-commands/extract_corpus.py $ARGUMENTS`
+   (No argument = all batches under `agent-work/batches/`. An argument scopes to one
+   batch dir, e.g. `/corpus-feedback agent-work/batches/batch-03-confirmed-velocity`.)
 
-2. Read `dev-tooling/findings/corpus.json`. Each issue record has: status,
+2. Read `agent-work/dev-tooling/findings/corpus.json`. Each issue record has: status,
    repo/branch, whether a patch exists, the `Fixes #` trailer, the diffstat, the
    actual added/removed hunk lines, and new test files. The `analyzer_reachable`
    and `edit_shape` fields are UNSET — you assign them.
