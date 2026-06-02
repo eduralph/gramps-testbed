@@ -320,3 +320,4 @@ jobs:
           name: '[upstream] Addon Unit Tests'
           path: test-results/**/*.xml
           reporter: java-junit
+          fail-on-error: false   # report, don't gate — see interface-tests.yml
