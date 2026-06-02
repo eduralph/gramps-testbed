@@ -218,3 +218,9 @@ jobs:
           name: '[testbed] Interface Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit
+          # Publish the report without failing THIS step when tests fail.
+          # The test outcome already shows in the job conclusion (the
+          # test-run step's exit code); dorny's default fail-on-error: true
+          # turned every upstream/addon test failure into a second,
+          # confusing red on the *reporting* step. Reporting is not gating.
+          fail-on-error: false

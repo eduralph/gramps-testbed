@@ -159,3 +159,4 @@ jobs:
           name: '[upstream] Gramps Unit Tests (${{ matrix.gramps_ref }})'
           path: test-results/*.xml
           reporter: java-junit
+          fail-on-error: false   # report, don't gate — see interface-tests.yml
