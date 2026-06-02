@@ -120,10 +120,7 @@ jobs:
         # installs in the venv but inherits apt-provided bindings.
         # Replaces actions/setup-python@v5; pip cache is restored below
         # via actions/cache.
-        run: |
-          python3 -m venv --system-site-packages .venv
-          echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
-          .venv/bin/python -m pip install --upgrade pip
+        uses: ./gramps-testbed/.github/actions/setup-gramps-venv
 
       - name: Restore pip cache
         uses: actions/cache@v4

@@ -1,0 +1,21 @@
+name: Set up Gramps test venv
+description: >-
+  Create a `--system-site-packages` venv so it inherits the apt-installed
+  PyGObject / pyatspi bindings (gramps.gen imports `gi` at module load), put
+  its bin/ on $GITHUB_PATH, and upgrade pip.
+
+  Ubuntu callers only (shell: bash). The Windows jobs keep this step inline:
+  they use a different interpreter (`/ucrt64/bin/python`) and translate
+  $GITHUB_WORKSPACE through `cygpath -u`, all under `shell: msys2 {0}` — a
+  composite step's shell is a literal that can't be the caller's msys2
+  default, and the body differs. Same split as compile-gramps-mo.
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python venv
+      shell: bash
+      run: |
+        python3 -m venv --system-site-packages .venv
+        echo "$GITHUB_WORKSPACE/.venv/bin" >> "$GITHUB_PATH"
+        .venv/bin/python -m pip install --upgrade pip
