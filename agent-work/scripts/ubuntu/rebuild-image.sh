@@ -14,7 +14,10 @@
 
 set -euo pipefail
 
-TESTBED="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# Repo root via git (depth-independent — a fixed-depth ../.. walk silently
+# breaks on directory moves; see test_runner_workspace_root.py). WORKSPACE
+# is its parent, holding the sibling gramps/ checkout.
+TESTBED="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 WORKSPACE="$(cd "$TESTBED/.." && pwd)"
 
 # Tag the image with platform + Gramps version so multiple versions can
