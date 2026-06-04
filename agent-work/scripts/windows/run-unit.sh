@@ -20,8 +20,8 @@
 #   - The pacman package list below is auto-installed via
 #     `pacman -S --needed --noconfirm`; safe to re-run.
 #
-# Workspace layout matches the Ubuntu runners: this script's grandparent
-# is the gramps-testbed checkout, and ../gramps lives next to it.
+# Workspace layout matches the Ubuntu runners: the gramps-testbed checkout
+# is this script's enclosing git repo, and ../gramps lives next to it.
 
 set -euo pipefail
 
@@ -31,7 +31,10 @@ if [[ "${MSYSTEM:-}" != "UCRT64" ]]; then
   exit 1
 fi
 
-WORKSPACE="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# Repo root via git (depth-independent — a fixed-depth ../.. walk silently
+# breaks on directory moves; see test_runner_workspace_root.py). WORKSPACE
+# is its parent, holding the sibling gramps/ checkout.
+WORKSPACE="$(cd "$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)/.." && pwd)"
 cd "$WORKSPACE"
 
 # Pacman package list — minimal subset of aio/build.sh sufficient to
