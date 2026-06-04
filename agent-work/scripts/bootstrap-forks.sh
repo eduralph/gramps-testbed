@@ -21,9 +21,9 @@
 #                          Default: maintenance/gramps60
 #
 # Usage:
-#   ./scripts/bootstrap-forks.sh                     # HTTPS, auto-owner
-#   ./scripts/bootstrap-forks.sh --ssh               # SSH, auto-owner
-#   FORK_OWNER=alice ./scripts/bootstrap-forks.sh    # HTTPS, alice/*
+#   ./agent-work/scripts/bootstrap-forks.sh                  # HTTPS, auto-owner
+#   ./agent-work/scripts/bootstrap-forks.sh --ssh            # SSH, auto-owner
+#   FORK_OWNER=alice ./agent-work/scripts/bootstrap-forks.sh # HTTPS, alice/*
 
 set -euo pipefail
 
@@ -32,7 +32,10 @@ if [[ "${1:-}" == "--ssh" ]]; then
   USE_SSH=1
 fi
 
-TESTBED="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Repo root via git (depth-independent — a fixed-depth ../.. walk silently
+# breaks on directory moves; see test_runner_workspace_root.py). WORKSPACE
+# is its parent, where the sibling gramps/ checkout gets cloned.
+TESTBED="$(git -C "$(dirname "${BASH_SOURCE[0]}")" rev-parse --show-toplevel)"
 WORKSPACE="$(cd "$TESTBED/.." && pwd)"
 cd "$WORKSPACE"
 

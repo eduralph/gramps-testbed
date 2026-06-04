@@ -22,6 +22,14 @@ This guards both halves of "don't get the same fragility again":
 The test is intentionally depth-agnostic: it asserts the resolved *result*,
 not a particular number of ``..`` levels, so it stays correct (and keeps
 guarding) no matter where the wrappers are moved next.
+
+Coverage is discovered by pattern (see ``_discover_root_scripts``), not a
+hand-maintained list. The first pass enumerated only the eight platform
+runners and so missed ``bootstrap-forks.sh`` -- one level up in
+``agent-work/scripts/``, carrying the identical fragile walk, and the script
+that *creates* the sibling layout the runners depend on. Globbing every
+root-resolving ``agent-work/scripts`` shell script closes that gap and any
+future one.
 """
 
 # ------------------------
@@ -38,20 +46,6 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WORKSPACE_ROOT = REPO_ROOT.parent
 
-# Every runner wrapper under the two platform dirs. Kept explicit (rather than
-# globbed) so a newly added runner that forgets the robust resolution shows up
-# as a missing-file failure here, prompting the author to add it to the guard.
-RUNNERS = (
-    "agent-work/scripts/ubuntu/run-unit.sh",
-    "agent-work/scripts/ubuntu/run-interface.sh",
-    "agent-work/scripts/ubuntu/run-addon-unit.sh",
-    "agent-work/scripts/ubuntu/clean-build.sh",
-    "agent-work/scripts/ubuntu/rebuild-image.sh",
-    "agent-work/scripts/ubuntu/run-manual.sh",
-    "agent-work/scripts/windows/run-unit.sh",
-    "agent-work/scripts/windows/run-addon-unit.sh",
-)
-
 # A TESTBED=/WORKSPACE= assignment at column 0 (the wrappers' shape).
 _ASSIGN_RE = re.compile(r"^(TESTBED|WORKSPACE)=")
 # Two or more chained parent hops -- the fixed-depth walk that broke. A single
@@ -64,26 +58,63 @@ def _resolution_lines(script: Path) -> list[str]:
     return [ln for ln in script.read_text().splitlines() if _ASSIGN_RE.match(ln)]
 
 
+def _discover_root_scripts() -> list[str]:
+    """Every tracked ``agent-work/scripts`` shell script that resolves a root.
+
+    Discovered by pattern, NOT a hand-maintained list: the original guard
+    enumerated only the eight platform runners, so ``bootstrap-forks.sh`` --
+    which sits one level up in ``agent-work/scripts/`` and carried the same
+    fragile walk -- slipped past it. Globbing every tracked ``*.sh`` under
+    ``agent-work/scripts`` that assigns ``WORKSPACE``/``TESTBED`` means a future
+    script with the brittle resolution is caught automatically. Scripts that
+    compute no root (e.g. ``verify-pr.sh``) have no assignment and drop out.
+    """
+    listed = subprocess.run(
+        ["git", "-C", str(REPO_ROOT), "ls-files", "agent-work/scripts"],
+        capture_output=True,
+        text=True,
+        check=True,
+    ).stdout.split()
+    return sorted(
+        rel
+        for rel in listed
+        if rel.endswith(".sh") and _resolution_lines(REPO_ROOT / rel)
+    )
+
+
+ROOT_SCRIPTS = _discover_root_scripts()
+
+
 # ------------------------------------------------------------
 #
 # RunnerWorkspaceRootTest
 #
 # ------------------------------------------------------------
 class RunnerWorkspaceRootTest(unittest.TestCase):
-    """Each runner resolves its roots correctly and depth-independently."""
+    """Each root-resolving script does so correctly and depth-independently."""
 
-    def test_all_runners_present(self) -> None:
-        """Every listed wrapper exists (catches a renamed/removed runner)."""
-        for rel in RUNNERS:
-            with self.subTest(runner=rel):
-                self.assertTrue(
-                    (REPO_ROOT / rel).is_file(),
-                    f"{rel} is missing -- update RUNNERS (and the guard) if it moved",
-                )
+    def test_discovery_reaches_every_level(self) -> None:
+        """Discovery is non-empty and spans both nesting levels.
+
+        Guards the guard: a glob that silently matched nothing -- or only the
+        platform subdirs, the blind spot that hid ``bootstrap-forks.sh`` --
+        would let the checks below pass vacuously. Assert the top-level script
+        and at least one script in each platform dir are covered.
+        """
+        self.assertTrue(ROOT_SCRIPTS, "discovered no root-resolving scripts")
+        self.assertIn("agent-work/scripts/bootstrap-forks.sh", ROOT_SCRIPTS)
+        self.assertTrue(
+            any(s.startswith("agent-work/scripts/ubuntu/") for s in ROOT_SCRIPTS),
+            "no ubuntu runner discovered",
+        )
+        self.assertTrue(
+            any(s.startswith("agent-work/scripts/windows/") for s in ROOT_SCRIPTS),
+            "no windows runner discovered",
+        )
 
     def test_resolution_is_git_based_not_fixed_depth(self) -> None:
         """Structural guard: git top-level lookup, never a chained ../.. walk."""
-        for rel in RUNNERS:
+        for rel in ROOT_SCRIPTS:
             script = REPO_ROOT / rel
             lines = _resolution_lines(script)
             with self.subTest(runner=rel):
@@ -116,7 +147,7 @@ class RunnerWorkspaceRootTest(unittest.TestCase):
         """
         want_workspace = os.path.realpath(WORKSPACE_ROOT)
         want_testbed = os.path.realpath(REPO_ROOT)
-        for rel in RUNNERS:
+        for rel in ROOT_SCRIPTS:
             script = REPO_ROOT / rel
             block = "\n".join(_resolution_lines(script)).replace(
                 '"${BASH_SOURCE[0]}"', f'"{script}"'
