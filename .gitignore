@@ -17,7 +17,7 @@ GrampsAddonsUserManual6.0.pdf
 work/
 # triage pipeline — ignore regenerable inputs and machine output,
 # keep scripts and the curated verdicts
-triage/data/
-triage/notes/
-dev-tooling/findings/
+agent-work/data/
+agent-work/notes/
+agent-work/dev-tooling/findings/
 .wikiscrape/
