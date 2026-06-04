@@ -1,7 +1,8 @@
 # Ubuntu 24.04 testbed image. Mirrors the GitHub Actions environment so
 # local dogtail runs match CI. This is one of several planned base images
 # (future: Fedora/Arch Dockerfiles for other Linux distros; macOS and
-# Windows use host-native setups under scripts/macos/ and scripts/windows/
+# Windows use host-native setups under agent-work/scripts/macos/ and
+# agent-work/scripts/windows/
 # when those land).
 #
 # Image is tagged gramps-testbed:ubuntu-<gramps-version> (e.g.
@@ -9,8 +10,8 @@
 # from ../gramps/gramps/version.py by the wrapper scripts, so different
 # Gramps versions produce different image tags and coexist cleanly.
 #
-# Run:   via scripts/ubuntu/run-interface.sh, run-unit.sh, or run-manual.sh
-# Build: scripts/ubuntu/rebuild-image.sh (handles version tagging for you)
+# Run:   via agent-work/scripts/ubuntu/run-interface.sh, run-unit.sh, or run-manual.sh
+# Build: agent-work/scripts/ubuntu/rebuild-image.sh (handles version tagging for you)
 FROM ubuntu:24.04
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -41,14 +42,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Addon system dependencies (requires_gi typelibs + requires_exe binaries).
 # These are NOT pip-installable, their package names differ per platform, and
 # Gramps' own Requirements only *checks* them (never installs), so they must be
-# in the image. scripts/lib/addon_system_deps.py is the single source mapping
+# in the image. agent-work/scripts/lib/addon_system_deps.py is the single source mapping
 # each declared dependency to its Ubuntu package; installing the full mapped
 # set here keeps the image generic (any addon reusing one of these works
 # without a rebuild) and prevents the per-platform list drift that previously
 # left graphviz/`dot` out of this image while Windows had it. A new addon
 # dependency means one new row in that map, enforced by
 # tests/test_addon_system_deps.py.
-COPY scripts/lib/addon_system_deps.py /opt/testbed/addon_system_deps.py
+COPY agent-work/scripts/lib/addon_system_deps.py /opt/testbed/addon_system_deps.py
 RUN apt-get update \
  && apt-get install -y --no-install-recommends \
       $(python3 /opt/testbed/addon_system_deps.py --platform ubuntu) \
