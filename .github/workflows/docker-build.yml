@@ -14,10 +14,18 @@ on:
     paths:
       - docker/Dockerfile.ubuntu
       - .github/workflows/docker-build.yml
+      # Source the Dockerfile COPYs into the image: a change to it can break
+      # the build, so it must trigger validation here too. Kept in sync with
+      # the Dockerfile's COPY set by tests/test_docker_build_path_filter.py.
+      - agent-work/scripts/lib/addon_system_deps.py
   pull_request:
     paths:
       - docker/Dockerfile.ubuntu
       - .github/workflows/docker-build.yml
+      # Source the Dockerfile COPYs into the image: a change to it can break
+      # the build, so it must trigger validation here too. Kept in sync with
+      # the Dockerfile's COPY set by tests/test_docker_build_path_filter.py.
+      - agent-work/scripts/lib/addon_system_deps.py
   schedule:
     # Nightly drift check at 06:00 UTC. Catches upstream Ubuntu 24.04
     # base-image changes and apt-package removals even when the
